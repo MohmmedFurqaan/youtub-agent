@@ -90,3 +90,9 @@ Run the notebook cells in order from the top.
 
 - If you are using a fresh environment, make sure the dependencies are installed before opening the notebook.
 - If Jupyter does not detect the environment automatically, restart it after running `uv sync`.
+
+## References
+- [uv docs](https://docs.astral.sh/uv/)
+- [lanchain docs](https://docs.langchain.com/oss/python/langchain/quickstart)
+- [video generating agents docs](https://docs.agents.lumalabs.ai/)
+- [python-telegram-bot](https://docs.python-telegram-bot.org/en/stable/)
