@@ -2,10 +2,46 @@
 
 This project is a notebook-based AI workflow for generating YouTube-style video prompts and related content. It uses Python, Jupyter, and several AI libraries, including LangChain and OpenRouter.
 
+## How to get started with development
+
+1. Clone the repository
+```bash
+git clone https://github.com/MohmmedFurqaan/youtub-agent.git
+```
+
+- change directory
+```bash 
+cd youtube-agent
+```
+
+2. Checkout from the Main branch (most imortant)
+```bash
+git checkout feature/yt-video
+```
+
+3. start developing the feature and push the code to the branch 
+```bash
+git status
+git add . # add all the local changes
+git commit -m"{add your message about the feature}"
+git push origin feature/yt-video # push to the github
+```
+
+4. (Optional) if you have any issue follow the give step
+- open the github
+- open the repostiry of the `youtub-agent`
+- head to the **Issues** section
+- rais the issues in the branch by siply **create issue**
+
+---
+
 ## Requirements
 
 - Python 3.12+
-- uv installed on your machine
+- uv installed on your machine 
+```bash
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ## Setup
 

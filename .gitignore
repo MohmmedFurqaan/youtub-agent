@@ -11,4 +11,5 @@ wheels/
 
 .env 
 model/*.ipynb_checkpoints
-model/utility/*.ipynb_checkpoints
+model/utility/*.ipynb_checkpoints 
+*.ipynb_checkpoints
