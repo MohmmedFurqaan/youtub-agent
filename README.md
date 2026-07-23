@@ -68,22 +68,22 @@ You can also customize the system prompt in `.env` with `SYSTEM_VIDEO_PROMPT`.
 
 ## Run the project
 
-Start Jupyter Lab:
+Start run the command:
 
 ```bash
-jupyter lab
+uv run main.py
 ```
 
-Then open the notebook file:
+Then open the python file:
 
-- `main.ipynb`
+- `main.py`
 
 Run the notebook cells in order from the top.
 
 ## Project structure
 
-- `main.ipynb` - main notebook entry point
-- `model/utility/` - supporting agent and prompt logic
+- `main.py` - main notebook entry point
+- `model/service/` - supporting agent and prompt logic
 - `.env` - local environment variables (not committed)
 
 ## Notes
