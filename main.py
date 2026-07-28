@@ -1,13 +1,24 @@
-
 # importing all the module 
-from dotenv import load_dotenv
+from model.service.prompt_agent import VideoAgent
+from model.utility.save_response import SaveLlmResponse
 
-from model.service.prompt_agent import PromptAgent
+# do not take the input if the response is saved 
+
+user_input = input("Enter you video description : ")
+ai_prompt_agent = VideoAgent(prompt_from_user=user_input)
 
 
 
-
-user_prompt = str(input("Describ about your video : "))
-ai_prompt_agent = PromptAgent(user_prompt)
+video = ai_prompt_agent.video_generation_agent()
 title = ai_prompt_agent.ai_title_prompt()
-print(f"title generated : {title}")
+
+print(video)
+print('*'*18)
+print(title)
+
+
+
+# view_data = SaveLlmResponse()
+
+# data = view_data.read_response()
+# print(data.get('title'))
