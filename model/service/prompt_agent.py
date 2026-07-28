@@ -6,10 +6,13 @@
 # Importing all the libraries 
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
-from model.utility.load_envs import load_all_env
 from pathlib import Path
 from model.utility.logging_config import setup_logging
+from model.utility.load_envs import load_all_env
 from model.utility.save_response import SaveLlmResponse
+import http.client
+import json
+import os
 
 
 class VideoAgent:
@@ -23,8 +26,8 @@ class VideoAgent:
     """
 
     # load Openrouter API 
-    OPENROUTER_API_KEY = load_all_env()
-    OPENROUTER_API_KEY = OPENROUTER_API_KEY[0]
+    OPENROUTER_API_KEY = load_all_env()[0]
+    KIE_API_KEY = load_all_env()[1]
 
 
     def __init__(self, prompt_from_user, DEVMODE=True):
@@ -32,6 +35,7 @@ class VideoAgent:
         
         # for development only, it will save the response to the json to reduce the token limits 
         self.DEVMODE=DEVMODE
+
 
         # setup the logger
         self.logger = setup_logging()
@@ -92,7 +96,7 @@ class VideoAgent:
         return response
 
 
-    def video_generation_agent(self) -> str:
+    def video_generation_pompt(self) -> str:
         '''
         These will generate the video script based on the user requested video
             Returns:
@@ -128,7 +132,7 @@ class VideoAgent:
         '''
 
         # fetch the video script
-        video_script = self.video_generation_agent()
+        video_script = self.video_generation_pompt()
 
         
         if self.DEVMODE:
@@ -154,7 +158,73 @@ class VideoAgent:
         else:
             title_response = self._base_agent_initializer(SYSTEM_MESSAGE=self.TITLE_GENERATION_PROMPT, HUMAN_MESSAGE=f"generate the title for the video script {video_script}")
             return str(title_response.content)
+
+    @classmethod
+    def _video_agent_initializor(cls, video_script, watermark=None, callback_url="http://your-callback-url.com/complete"):
+        '''generate the video for the given script
+
+        Args:
+            video_script (str): a prompt for the video or the script 
+            watermark (str): Default is None if configured then the watermark is applied to the video
+            callback_url (str): a callback url to output the video on that URL
+        '''
+
+        conn = http.client.HTTPSConnection("api.kie.ai")
+        payload = json.dumps({
+        "prompt": video_script,
+        "model": "veo3_fast",
+        "watermark": watermark,
+        "callBackUrl": "http://your-callback-url.com/complete",
+        "aspect_ratio": "9:16", # prefered video output for the youtube...
+        "enableFallback": False,
+        "enableTranslation": False,
+        "generationType": "TEXT_2_VIDEO"
+        })
+        print(cls.KIE_API_KEY)
+
+        headers = {
+        'Authorization': f'Bearer {cls.KIE_API_KEY}',
+        'Content-Type': 'application/json'
+        }
+        conn.request("POST", "/api/v1/veo/generate", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
+        return data.decode("utf-8")
+
+    def video_generator(self, watermark: str):
+        '''call the video agent initializor to generate the video
+
+        Args:
+            watermark (str): watermarker for the video
+        '''
+
+        if self.DEVMODE:
+
+            cache_data = self._read_cached_data()
+
+
+            # parse the json data to the llm
+            if isinstance(cache_data, dict):
+                self.logger.info('(DEBUG MODE) LOADING THE CACHED DATA .... ')
+                data = self._video_agent_initializor(video_script=cache_data.get('video_script'), watermark=watermark)
+                return data 
+
+            # if we do not have the cache data fetch it from the agent 
+            video_script = self.video_generation_pompt()
+            data = self._video_agent_initializor(video_script=video_script,watermark=watermark)
+            return data
+
+        else:
+            # for production mode (DEBUG=False) 
+            video_script = self.video_generation_pompt()
+            data = self._video_agent_initializor(video_script=video_script,watermark=watermark)
+
+            return data
+
+
+
             
 
-    
+            
 
+        
