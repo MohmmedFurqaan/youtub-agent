@@ -24,7 +24,7 @@ No explanations.
 
 ## VIDEO FORMAT
 
-Duration: 30 seconds
+Duration: 10 seconds
 
 Aspect Ratio: 9:16
 
