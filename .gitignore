@@ -21,3 +21,4 @@ model/utility/*.ipynb_checkpoints
 /data/
 /logs/
 /tests/
+.vscode
