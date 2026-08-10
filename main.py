@@ -1,15 +1,22 @@
+# importing all the modules
+from model.service.prompt_agent import VideoAgent
+from model.service.asset_generator import AssetGenerator
 
-# importing all the module 
-from dotenv import load_dotenv
-import os 
-from pathlib import Path
-from model.service.prompt_agent import ai_video_prompt
+# ── Phase 1: Generate structured JSON video script ─────────────────────────
+ai_prompt_agent = VideoAgent(
+    prompt_from_user="The video on MCP servers and why they are useful",
+    DEVMODE=False,
+)
 
+print("▶ Phase 1 — Generating video script …")
+video_script = ai_prompt_agent.video_script_generator()
+print("✔ Script generated:")
+print(video_script)
 
-SYSTEM_VIDEO_PROMPT = Path(
-    "prompts/script_video_prompt.md"
-).read_text(encoding='utf-8')
+# ── Phase 2: Generate physical assets (images + TTS) ──────────────────────
+print("\n▶ Phase 2 — Generating assets …")
+asset_gen = AssetGenerator(script=video_script)
+props_path = asset_gen.generate_assets()
 
-user_prompt = str(input("Descrie about your video : "))
-response = ai_video_prompt(user_prompt, SYSTEM_VIDEO_PROMPT=SYSTEM_VIDEO_PROMPT)
-print(response, flush=True)
+print(f"\n✔ All assets generated successfully.")
+print(f"  video-props.json → {props_path}")
