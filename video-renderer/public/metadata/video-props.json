@@ -1,0 +1,87 @@
+{
+    "title": "MCP Servers Explained",
+    "scenes": [
+        {
+            "scene_number": 1,
+            "narration": "MCP servers changed software forever.",
+            "on_screen_text": "MCP REVOLUTIONIZED",
+            "background_image": "metadata/scene/scene1_bg.png",
+            "audio_file": "metadata/scene/scene1.mp3",
+            "duration_in_frames": 112
+        },
+        {
+            "scene_number": 2,
+            "narration": "Imagine a bridge linking separate realms.",
+            "on_screen_text": "DATA BRIDGE",
+            "background_image": "metadata/scene/scene2_bg.png",
+            "audio_file": "metadata/scene/scene2.mp3",
+            "duration_in_frames": 99
+        },
+        {
+            "scene_number": 3,
+            "narration": "Data flows through a central hub, enabling communication.",
+            "on_screen_text": "CENTRAL HUB",
+            "background_image": "metadata/scene/scene3_bg.png",
+            "audio_file": "metadata/scene/scene3.mp3",
+            "duration_in_frames": 129
+        },
+        {
+            "scene_number": 4,
+            "narration": "Web app uses MCP to retrieve user data.",
+            "on_screen_text": "USER DATA FETCH",
+            "background_image": "metadata/scene/scene4_bg.png",
+            "audio_file": "metadata/scene/scene4.mp3",
+            "duration_in_frames": 118
+        },
+        {
+            "scene_number": 5,
+            "narration": "Centralization boosts scalability despite traffic concentration.",
+            "on_screen_text": "GLOWING SERVER",
+            "background_image": "metadata/scene/scene5_bg.png",
+            "audio_file": "metadata/scene/scene5.mp3",
+            "duration_in_frames": 148
+        },
+        {
+            "scene_number": 6,
+            "narration": "Even though it centralizes traffic, it improves scalability.",
+            "on_screen_text": "TRAFFIC SPLIT VIEW",
+            "background_image": "metadata/scene/scene6_bg.png",
+            "audio_file": "metadata/scene/scene6.mp3",
+            "duration_in_frames": 132
+        },
+        {
+            "scene_number": 7,
+            "narration": "Offline operation increases reliability.",
+            "on_screen_text": "OFFLINE RELIABILITY",
+            "background_image": "metadata/scene/scene7_bg.png",
+            "audio_file": "metadata/scene/scene7.mp3",
+            "duration_in_frames": 110
+        },
+        {
+            "scene_number": 8,
+            "narration": "Multiple nodes converge toward a central point.",
+            "on_screen_text": "CONVERGING NODES",
+            "background_image": "metadata/scene/scene8_bg.png",
+            "audio_file": "metadata/scene/scene8.mp3",
+            "duration_in_frames": 107
+        },
+        {
+            "scene_number": 9,
+            "narration": "Simplifies complex architectures.",
+            "on_screen_text": "SIMPLE TOWER",
+            "background_image": "metadata/scene/scene9_bg.png",
+            "audio_file": "metadata/scene/scene9.mp3",
+            "duration_in_frames": 95
+        },
+        {
+            "scene_number": 10,
+            "narration": "Follow for more tech insights.",
+            "on_screen_text": "FOLLOW FOR MORE",
+            "background_image": "metadata/scene/scene10_bg.png",
+            "audio_file": "",
+            "duration_in_frames": 90
+        }
+    ],
+    "fps": 30,
+    "total_duration_frames": 1140
+}
