@@ -47,24 +47,24 @@ Before Remotion can render, it needs the actual media files.
 2. **Character Upload Management**: 
    - Allow the user to upload custom `.png` files with transparent backgrounds for each character (e.g., `Host.png`, `Guest.png`).
    - If a custom image isn't provided, use an AI Image API (like Pollinations.ai or DALL-E) to generate a character on a solid background, then use the **`rembg`** Python library (recommended: `uv add rembg` or fallback to `pip install rembg`) to automatically strip the background.
-   - Save these transparent images to `data/assets/characters/`.
-3. **Text-to-Speech (TTS) using edge-tts**: Loop through `scenes` and use the `edge-tts` Python library to generate the audio for the `narration`. Assign different built-in Microsoft Edge voices based on the `speaker` (e.g., "en-US-ChristopherNeural" for Host, "en-US-AriaNeural" for Guest). Save the output as `.mp3` files in a temporary directory (`data/output/video_id/audio/`). This provides high-quality, completely free TTS without needing API keys.
-4. **Background Generation**: Generate background images based on `background_prompt`. Save them as `.png`/`.jpg` in `data/output/video_id/images/`.
+   - Save these transparent images to `data/metadata/characters/`.
+3. **Text-to-Speech (TTS) using edge-tts**: Loop through `scenes` and use the `edge-tts` Python library to generate the audio for the `narration`. Assign different built-in Microsoft Edge voices based on the `speaker` (e.g., "en-US-ChristopherNeural" for Host, "en-US-AriaNeural" for Guest). Save the output as `.mp3` files in `data/metadata/scene/`. This provides high-quality, completely free TTS without needing API keys.
+4. **Background Generation**: Generate background images based on `background_prompt`. Save them as `.png`/`.jpg` in `data/metadata/scene/`.
 5. **Duration Calculation**: Use a library like `mutagen` or `pydub` in Python to calculate the exact duration (in seconds/frames) of each audio file so Remotion knows how long each scene should be.
-6. Save a final `props.json` in `data/output/video_id/` that maps these assets:
+6. Save a final `video-props.json` in `data/metadata/` that maps these assets. **CRITICAL: Use the existing `SaveLlmResponse` utility from `model/utility/save_response.py` to handle all JSON file reading and writing:**
 ```json
 {
   "fps": 30,
   "characters": {
-    "Host": "/absolute/path/to/Host.png",
-    "Guest": "/absolute/path/to/Guest.png"
+    "Host": "/absolute/path/to/data/metadata/characters/Host.png",
+    "Guest": "/absolute/path/to/data/metadata/characters/Guest.png"
   },
   "scenes": [
     {
       "durationInFrames": 120,
       "speaker": "Host",
-      "audioPath": "/absolute/path/to/audio/scene1.mp3",
-      "backgroundPath": "/absolute/path/to/images/scene1.png",
+      "audioPath": "/absolute/path/to/data/metadata/scene/scene1.mp3",
+      "backgroundPath": "/absolute/path/to/data/metadata/scene/scene1.png",
       "onScreenText": "APIs EXPLAINED"
     }
   ]
@@ -102,8 +102,7 @@ class RemotionRenderer:
         self.remotion_dir = remotion_dir
 
     def render(self, props_path, output_mp4_path):
-        # Example CLI command: 
-        # npx remotion render src/index.ts MainComposition out.mp4 --props ./props.json
+        # npx remotion render src/index.ts MainComposition out.mp4 --props ./video-props.json
         command = [
             "npx", "remotion", "render", 
             "src/index.ts", "MainComposition", 
@@ -121,8 +120,9 @@ class RemotionRenderer:
 ### Phase 5: Bring it all together in `main.py`
 Update `main.py` to chain these services sequentially:
 1. `video_script = ai_prompt_agent.video_script_generator()` (Returns JSON)
-2. `props_file = asset_generator.generate_assets(video_script)` (Generates Audio/Images, returns path to props.json)
-3. `renderer.render(props_file, "final_output.mp4")` (Triggers Remotion)
+2. `props_file = asset_generator.generate_assets(video_script)` (Generates Audio/Images, returns path to `video-props.json`)
+3. `renderer.render(props_file, "data/metadata/video/final_video.mp4")` (Triggers Remotion and saves the `.mp4` into the `data/metadata/video/` directory)
+4. Finally, update `data/metadata/youtube-data.json` with the path to the generated MP4 file, utilizing the `SaveLlmResponse` utility class for file handling.
 
 ---
 
