@@ -1,5 +1,4 @@
 import json
-import shutil
 from pathlib import Path
 
 
@@ -9,18 +8,16 @@ class SaveLlmResponse:
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self.data_dir = self.project_root / directory
 
-        if not self.data_dir.exists():
-
-            # create the directory if it does'nt exists
-            self.data_dir.mkdir(parents=True, exist_ok=True)
+        # Always ensure the full directory tree exists (handles nested paths too)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.json_file = self.data_dir / filename
 
-        if self.json_file.exists() and self.json_file.is_dir():
-            shutil.rmtree(self.json_file)
+        # Ensure any subdirectory within filename (e.g. "scene/props.json") is created
+        self.json_file.parent.mkdir(parents=True, exist_ok=True)
 
         if not self.json_file.exists():
-            self.json_file.touch(exist_ok=True)
+            self.json_file.touch()
 
         self.data = data
 

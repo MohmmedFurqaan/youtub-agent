@@ -1,13 +1,22 @@
-# importing all the module 
+# importing all the modules
 from model.service.prompt_agent import VideoAgent
-from model.utility.save_response import SaveLlmResponse
+from model.service.asset_generator import AssetGenerator
 
+# ── Phase 1: Generate structured JSON video script ─────────────────────────
+ai_prompt_agent = VideoAgent(
+    prompt_from_user="The video on MCP servers and why they are useful",
+    DEVMODE=False,
+)
 
-ai_prompt_agent = VideoAgent(prompt_from_user="The video on the McP server and why they are usefull", DEVMODE=False)
-
-# logic to generate the video prompt and the title from the model 
+print("▶ Phase 1 — Generating video script …")
 video_script = ai_prompt_agent.video_script_generator()
-title = ai_prompt_agent.ai_title_prompt(video_script=video_script)
+print("✔ Script generated:")
 print(video_script)
-print(title)
 
+# ── Phase 2: Generate physical assets (images + TTS) ──────────────────────
+print("\n▶ Phase 2 — Generating assets …")
+asset_gen = AssetGenerator(script=video_script)
+props_path = asset_gen.generate_assets()
+
+print(f"\n✔ All assets generated successfully.")
+print(f"  video-props.json → {props_path}")

@@ -22,3 +22,5 @@ model/utility/*.ipynb_checkpoints
 /logs/
 /tests/
 .vscode
+video-renderer/out
+video-renderer/node_modules
