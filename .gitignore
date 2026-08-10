@@ -24,3 +24,4 @@ model/utility/*.ipynb_checkpoints
 .vscode
 video-renderer/out
 video-renderer/node_modules
+.vscode/mcp.json
