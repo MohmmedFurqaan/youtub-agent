@@ -4,17 +4,17 @@ from pathlib import Path
 
 
 class SaveLlmResponse:
-    def __init__(self, data = None):
+    def __init__(self, data = None, directory: str = 'data', filename: str = 'llm_response.json'):
         
         self.project_root = Path(__file__).resolve().parent.parent.parent
-        self.data_dir = self.project_root/'data'
+        self.data_dir = self.project_root / directory
 
         if not self.data_dir.exists():
 
             # create the directory if it does'nt exists
             self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        self.json_file = self.data_dir / 'llm_response.json'
+        self.json_file = self.data_dir / filename
 
         if self.json_file.exists() and self.json_file.is_dir():
             shutil.rmtree(self.json_file)
