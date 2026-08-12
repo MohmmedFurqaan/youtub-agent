@@ -20,7 +20,7 @@ def setup_logging(name: str = __name__) -> logging.Logger:
     sys.stdout.reconfigure(encoding='utf-8')
 
     # Get project root directory
-    project_root = Path(__file__).resolve().parent.parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
     log_base = os.path.join(project_root, 'logs')
     
     # Create logs directory if it doesn't exist

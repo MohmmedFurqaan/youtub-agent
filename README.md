@@ -1,72 +1,66 @@
 # YouTube Agent — Faceless Video Generator
 
-An automated pipeline that turns any technical topic into a polished **YouTube Shorts-ready MP4** using Gemini AI, Pollinations.ai, Microsoft edge-tts, and Remotion.
+This project turns a technical topic into a faceless YouTube-style video pipeline powered by AI, asset generation, and an optional YouTube upload flow.
 
-## How it works
+The current workflow is:
 
-```
-main.py
-  │
-  ├── Phase 1 — AI Script (Gemini via OpenRouter)
-  │     Generates a structured JSON video script (scenes, narration, keywords)
-  │     → data/llm_response.json
-  │
-  ├── Phase 2 — Asset Generation (Python)
-  │     Background images  →  Pollinations.ai (free, no key needed)
-  │     TTS narration      →  edge-tts (Microsoft Neural voices, free)
-  │     → data/metadata/video-props.json
-  │     → data/metadata/scene/scene<n>_bg.png
-  │     → data/metadata/scene/scene<n>.mp3
-  │
-  └── Phase 3 — Video Render (Remotion / Node.js)
-        Ken Burns backgrounds + word-by-word TikTok captions + progress bar
-        → video-renderer/out/video.mp4
-```
+- Phase 1: generate a structured video script with an LLM via OpenRouter
+- Phase 2: generate cached media props and scene assets in the project data folder
+- Phase 3: render the final MP4 with Remotion
+- Optional Phase 4: upload the final MP4 to YouTube using the Google OAuth environment config
+
+---
+
+## Stack
+
+- Python 3.12+
+- LangChain + OpenRouter
+- Pollinations.ai for background images
+- Microsoft edge-tts for narration
+- Remotion + React for rendering
+- Google YouTube Data API v3 for uploads
 
 ---
 
 ## Requirements
 
-| Tool | Version | Install |
+| Tool | Version | Notes |
 |---|---|---|
-| Python | 3.12+ | [python.org](https://www.python.org/) |
-| uv | latest | see below |
-| Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
-| npm | 9+ | bundled with Node.js |
+| Python | 3.12+ | Required for the pipeline |
+| uv | latest | Recommended package manager |
+| Node.js | 18+ | Only needed for Remotion rendering |
+| npm | 9+ | Bundled with Node.js |
 
-Install **uv** (Python package manager):
+Install uv:
+
 ```bash
-# Linux / macOS
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+If needed, install it via pip:
 
-## or to simple instala uv by pip
+```bash
 pip install uv
-
 ```
 
 ---
 
+## Project setup
 
-## Setup
-
-### 1 — Clone the repo
+### 1. Clone the repo
 
 ```bash
-git clone https://github.com/MohmmedFurqaan/youtub-agent.git
-cd youtub-agent
-git checkout feature/video-agent
+git clone <repo-url>
+cd yt-agent
 ```
 
-### 2 — Install Python dependencies
+### 2. Install Python dependencies
 
 ```bash
 uv sync
 ```
 
-### 3 — Install Node.js dependencies (Remotion renderer)
+### 3. Install Remotion dependencies
 
 ```bash
 cd video-renderer
@@ -74,89 +68,147 @@ npm install
 cd ..
 ```
 
-### 4 — Configure environment variables
+### 4. Configure environment variables
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
+Create a `.env` file at the project root and add the required values:
 
 ```env
-OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_API_KEY=your_openrouter_key
+OPENROUTER_MODEL_NAME=nvidia/nemotron-3.5-lightning:free
+DEVMODE=True
+
+YOUTUBE_CLIENT_ID=your_google_client_id
+YOUTUBE_CLIENT_SECRET=your_google_client_secret
+YOUTUBE_PROJECT_ID=your_google_project_id
+
+YOUTUBE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+YOUTUBE_TOKEN_URI=https://oauth2.googleapis.com/token
+YOUTUBE_AUTH_PROVIDER_X509_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
+YOUTUBE_REDIRECT_URI=http://localhost
 ```
 
-> You can also set `SYSTEM_VIDEO_PROMPT` in `.env` to override the default video script prompt.
+Important notes:
+
+- Do not use a local `credentials.json` file.
+- The project uses env-based OAuth configuration instead.
+- `load_envs.py` validates that the required env vars exist before the pipeline starts.
 
 ---
 
-## How to run
+## How the project runs
 
-### Step 1 — Generate the script + assets (Python)
+### Main entry point
 
 ```bash
 uv run main.py
 ```
 
-This runs **Phase 1** (AI script generation) and **Phase 2** (image + audio asset download). Outputs:
-- `data/llm_response.json` — raw LLM script
-- `data/metadata/video-props.json` — Remotion props
-- `data/metadata/scene/` — background PNGs + MP3s
+The current main flow does the following:
 
-> Assets are **cached** — re-running will skip already-generated files.
+1. Generate the AI script from the prompt
+2. Write the script to `data/llm_response.json`
+3. If `DEVMODE` is false, generate media assets and Remotion props
+4. If a video exists in the data folder, upload it to YouTube automatically
 
-### Step 2 — Render the video (Node.js / Remotion)
+---
+
+## Script and data storage
+
+The reusable file helper is in [src/utility/save_response.py](src/utility/save_response.py).
+
+It is responsible for:
+
+- resolving project paths under the repo root
+- creating directories when needed
+- writing JSON payloads to `data/`
+- copying a generated video into the data folder for uploads
+
+Default locations:
+
+- `data/llm_response.json` — generated script payload
+- `data/metadata/video-props.json` — asset metadata for Remotion
+- `data/metadata/scene/` — per-scene background images and audio
+- `data/video.mp4` — final uploaded video location if present
+
+---
+
+## YouTube upload flow
+
+The uploader is in [src/youtube/video_uploader.py](src/youtube/video_uploader.py).
+
+It does the following:
+
+- reads OAuth config from `.env`
+- creates the YouTube API client without requiring `credentials.json`
+- uploads the video passed to it
+- defaults to `data/video.mp4` if no path is supplied
+
+Example usage:
+
+```python
+from src.youtube.video_uploader import upload_video
+
+upload_video("data/video.mp4", title="My AI Generated Video")
+```
+
+The project also wires this into [main.py](main.py), which checks the data folder and uploads automatically when a final MP4 is available.
+
+---
+
+## Rendering
+
+To render the video via Remotion:
 
 ```bash
 cd video-renderer
 npm run render:props
 ```
 
-Output: `video-renderer/out/video.mp4`
+Output:
 
-> First render downloads Chrome Headless Shell (~27 MB, one-time only).
+- `video-renderer/out/video.mp4`
 
-### (Optional) — Preview in Remotion Studio
+Optional preview:
 
 ```bash
 cd video-renderer
 npm run start
 ```
 
-Opens a live preview at `http://localhost:3000`. Scrub through all scenes interactively.
-
 ---
 
-## Project structure
+## Repository structure
 
-```
+```text
 yt-agent/
-├── main.py                         ← Pipeline entry point (Phase 1 + 2)
+├── main.py
+├── .env
 ├── prompts/
-│   └── script_video_prompt.md      ← LLM system prompt (faceless format)
-├── model/
-│   ├── service/
-│   │   ├── prompt_agent.py         ← Phase 1: Gemini script generation
-│   │   └── asset_generator.py      ← Phase 2: image + TTS generation
-│   └── utility/
-│       ├── save_response.py        ← JSON persistence utility
-│       └── logging_config.py       ← Logging setup
+│   ├── script_video_prompt.md
+│   ├── title_video_prompt.md
+│   └── thumbnail_image_prompt.md
+├── src/
+│   ├── model/
+│   │   └── service/
+│   │       ├── prompt_agent.py
+│   │       └── asset_generator.py
+│   ├── utility/
+│   │   ├── load_envs.py
+│   │   ├── logging_config.py
+│   │   └── save_response.py
+│   └── youtube/
+│       └── video_uploader.py
 ├── data/
-│   ├── llm_response.json           ← Raw LLM output (generated)
+│   ├── llm_response.json
+│   ├── video.mp4
+│   ├── youtube-dataset/
 │   └── metadata/
-│       ├── video-props.json        ← Remotion props (generated)
-│       └── scene/                  ← PNGs + MP3s per scene (generated)
-├── video-renderer/                 ← Remotion project (Node.js)
-│   ├── package.json
-│   ├── public/
-│   │   └── metadata → ../../data/metadata   ← symlink (static asset serving)
-│   └── src/
-│       ├── index.tsx               ← registerRoot + Composition
-│       ├── MainComposition.tsx     ← Series of scenes
-│       ├── SceneRenderer.tsx       ← Ken Burns + captions + progress bar
-│       └── types.ts                ← VideoProps + Scene types
-├── docs/                           ← Architecture docs
-└── test/                           ← Test plans
+│       ├── video-props.json
+│       └── scene/
+├── video-renderer/
+├── docs/
+├── tests/
+└── README.md
 ```
 
 ---
@@ -165,22 +217,20 @@ yt-agent/
 
 | Problem | Fix |
 |---|---|
-| `uv: command not found` | Install uv — see Requirements above |
-| `OPENROUTER_API_KEY not set` | Copy `.env.example` → `.env` and fill in the key |
-| `Cannot read properties of undefined (reading 'readFile')` | TypeScript version issue — run `npm install typescript@~5.8.3` inside `video-renderer/` |
-| 404 errors on image/audio in Remotion | Verify `video-renderer/public/metadata` symlink exists: `ls video-renderer/public/` |
-| Chrome Headless Shell download fails | Check internet connection; Remotion downloads it once to a cache dir |
+| `OPENROUTER_API_KEY is not set` | Add the key to `.env` |
+| `OPENROUTER MODEL NAME is not set` | Add `OPENROUTER_MODEL_NAME` to `.env` |
+| `No video found in data folder to upload` | Put the final MP4 at `data/video.mp4` |
+| Google OAuth fails | Check `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, and `YOUTUBE_REDIRECT_URI` |
+| `uv: command not found` | Install uv and reopen the terminal |
+| Remotion render fails | Run `cd video-renderer && npm install` |
 
 ---
 
-## Useful links
+## Developer notes
 
-- [OpenRouter API key](docs/agent-api-key.md)
-- [Remotion docs](https://www.remotion.dev/docs/)
-- [uv docs](https://docs.astral.sh/uv/)
-- [edge-tts voices](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support)
-- [Pollinations.ai](https://pollinations.ai/)
-- [LangChain docs](https://docs.langchain.com/oss/python/langchain/quickstart)
+- The project prefers centralized file handling through [src/utility/save_response.py](src/utility/save_response.py) instead of random path logic spread across modules.
+- You should not add a `credentials.json` file for the YouTube uploader.
+- Keep all generated runtime artifacts under `data/` so the pipeline remains portable and easy to reason about.
 
 ---
 
@@ -189,8 +239,8 @@ yt-agent/
 ```bash
 git checkout -b feature/<your-feature-name>
 git add .
-git commit -m "describe your change"
+git commit -m "Describe your change"
 git push origin feature/<your-feature-name>
 ```
 
-Open a pull request or raise an issue on the [GitHub Issues](https://github.com/MohmmedFurqaan/youtub-agent/issues) page.
+Open a pull request for review once the change is ready.
