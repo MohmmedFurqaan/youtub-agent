@@ -26,3 +26,7 @@ video-renderer/node_modules
 .vscode/mcp.json
 youtube-cost-break-down.ods
 .~lock.youtube-cost-break-down.ods#
+
+# YouTube OAuth credentials
+credentials.json
+token.json

@@ -9,10 +9,19 @@ from src.utility.load_envs import load_all_env
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
-def get_youtube_oauth_config() -> dict:
-    envs = load_all_env()
-    return envs[3]  # youtube_config is the 4th element
+import json
+from pathlib import Path
 
+def get_youtube_oauth_config() -> dict:
+    credentials_path = Path(__file__).resolve().parents[2] / "credentials.json"
+
+    if not credentials_path.exists():
+        raise FileNotFoundError(
+            f"YouTube OAuth credentials not found: {credentials_path}"
+        )
+
+    with open(credentials_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def upload_video(
     video_path: str | Path | None = None,
