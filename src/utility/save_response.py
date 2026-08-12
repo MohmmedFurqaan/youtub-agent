@@ -16,6 +16,9 @@ class SaveLlmResponse:
         if not self.json_file.exists():
             self.json_file.touch()
 
+        # keep track of the current id generated
+        self.current_id = None
+
         self.data = data
 
     @classmethod
@@ -39,45 +42,58 @@ class SaveLlmResponse:
         return destination
 
     def write_data(self, generate_id=True):
-        """Write dict/list data to the JSON file.
-
+        """Write data to the JSON file.
         Args:
             generate_id (bool):
                 If True and the payload is a dict, append a unique script_id field.
+        Returns:
+            str: The current_id if generate_id is True and the payload is a dict, otherwise None.
         """
+
         if self.data is None:
             return "Provide the dictionary data to the class while initializing"
 
         payload = self.data
 
         if isinstance(payload, dict) and generate_id:
-            payload = {**payload, 'script_id': str(uuid4())}
+            self.current_id = str(uuid4())
+
+            payload = {
+                self.current_id: payload
+            }
 
         if self.json_file.stat().st_size > 0:
             try:
-                with open(self.json_file, mode='r', encoding='utf-8') as json_file_reader:
+                with open(
+                    self.json_file,
+                    mode="r",
+                    encoding="utf-8"
+                ) as json_file_reader:
                     existing_data = json.load(json_file_reader)
+
             except json.JSONDecodeError:
                 existing_data = {}
         else:
             existing_data = {}
 
-        if isinstance(existing_data, list):
-            existing_data.append(payload)
-            to_write = existing_data
-        else:
-            if isinstance(payload, dict):
-                if not isinstance(existing_data, dict):
-                    existing_data = {}
-                existing_data.update(payload)
-                to_write = existing_data
-            else:
-                to_write = payload
+        if not isinstance(existing_data, dict):
+            existing_data = {}
 
-        with open(self.json_file, mode='w', encoding='utf-8') as file_writer:
-            json.dump(to_write, file_writer, indent=4, ensure_ascii=False)
+        existing_data.update(payload)
 
-        return True
+        with open(
+            self.json_file,
+            mode="w",
+            encoding="utf-8"
+        ) as file_writer:
+            json.dump(
+                existing_data,
+                file_writer,
+                indent=4,
+                ensure_ascii=False
+            )
+
+        return self.current_id
 
     def read_response(self):
         if not self.json_file.exists():
@@ -100,5 +116,37 @@ class SaveLlmResponse:
         if isinstance(data, list):
             return data[-1] if data else 'No data found'
 
-        return data
+        if self.current_id is None:
+            # No write was performed on this instance; return the latest entry.
+            last_key = list(data.keys())[-1]
+            return data[last_key]
 
+        return data[self.current_id]
+
+    def read_response_with_id(self):
+        '''Read the latest response and return (script_id, data) tuple.
+        Useful when you need the ID for folder naming and metadata tracking.
+        '''
+        if not self.json_file.exists():
+            return None, {}
+
+        with open(self.json_file, 'r', encoding='utf-8') as file_reader:
+            raw_data = file_reader.read()
+
+        if not raw_data.strip():
+            return None, 'No data found'
+
+        try:
+            data = json.loads(raw_data)
+        except (json.JSONDecodeError, TypeError):
+            return None, 'No data found'
+
+        if not data or not isinstance(data, dict):
+            return None, 'No data found'
+
+        if self.current_id:
+            print(f"from self current_id: {self.current_id}")
+            return self.current_id, data[self.current_id]
+        print(f"from last key: {list(data.keys())[-1]}")
+        last_key = list(data.keys())[-1]
+        return last_key, data[last_key]

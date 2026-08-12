@@ -10,14 +10,35 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
 def get_youtube_oauth_config() -> dict:
-    _, _, _, youtube_config = load_all_env()
-    return youtube_config
+    envs = load_all_env()
+    return envs[3]  # youtube_config is the 4th element
 
 
-def upload_video(video_path: str | Path | None = None, title: str = "Sample AI Generated Reel"):
+def upload_video(
+    video_path: str | Path | None = None,
+    title: str = "Sample AI Generated Reel",
+    description: str = "Uploaded automatically using the YouTube Data API.",
+    tags: list[str] | None = None,
+    category_id: str = "22",
+    privacy_status: str = "public",
+):
+    '''Upload a video to YouTube with full metadata.
+
+    Args:
+        video_path: Path to the video file.
+        title: Video title.
+        description: Video description.
+        tags: List of tags/keywords.
+        category_id: YouTube category ID (default 22 = People & Blogs).
+        privacy_status: "public", "private", or "unlisted".
+    Returns:
+        YouTube API response dict.
+    '''
+    if tags is None:
+        tags = ["AI", "YouTube Agent", "Automation"]
+
     if video_path is None:
         from src.utility.save_response import SaveLlmResponse
-
         video_path = SaveLlmResponse.resolve_video_path()
 
     video_file = Path(video_path)
@@ -35,12 +56,12 @@ def upload_video(video_path: str | Path | None = None, title: str = "Sample AI G
     request_body = {
         "snippet": {
             "title": title,
-            "description": "Uploaded automatically using the YouTube Data API.",
-            "tags": ["AI", "YouTube Agent", "Automation", "Test"],
-            "categoryId": "22",
+            "description": description,
+            "tags": tags,
+            "categoryId": category_id,
         },
         "status": {
-            "privacyStatus": "public",
+            "privacyStatus": privacy_status,
             "selfDeclaredMadeForKids": False,
         },
     }
@@ -71,12 +92,8 @@ def upload_video(video_path: str | Path | None = None, title: str = "Sample AI G
     print("\n====================================")
     print("       UPLOAD SUCCESSFUL!")
     print("====================================")
-    print("\nVideo ID:")
-    print(video_id)
-    print("\nYouTube URL:")
-    print(f"https://www.youtube.com/watch?v={video_id}")
-    print("\nPrivacy:")
-    print("PUBLIC")
-    print("\n====================================")
+    print(f"\nVideo ID: {video_id}")
+    print(f"YouTube URL: https://www.youtube.com/watch?v={video_id}")
+    print(f"Privacy: {privacy_status.upper()}")
+    print("====================================")
     return response
-

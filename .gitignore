@@ -25,3 +25,5 @@ model/utility/*.ipynb_checkpoints
 video-renderer/out
 video-renderer/node_modules
 .vscode/mcp.json
+youtube-cost-break-down.ods
+.~lock.youtube-cost-break-down.ods#

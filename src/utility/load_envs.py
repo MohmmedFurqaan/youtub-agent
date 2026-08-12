@@ -27,6 +27,7 @@ def load_all_env() -> list:
     OPENROUTER_API_KEY = _required_env("OPENROUTER_API_KEY")
     DEVMODE = _parse_bool(os.getenv("DEVMODE"))
     OPENROUTER_MODEL_NAME = _required_env("OPENROUTER_MODEL_NAME")
+    KIE_API_KEY = os.getenv("KIE_API_KEY", "")
 
     youtube_config = {
         "installed": {
@@ -48,5 +49,6 @@ def load_all_env() -> list:
         DEVMODE,
         OPENROUTER_MODEL_NAME,
         youtube_config,
+        KIE_API_KEY,
     ])
     return envs

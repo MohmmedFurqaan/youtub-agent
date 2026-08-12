@@ -14,7 +14,7 @@ import json
 
 
 
-class VideoAgent:
+class VideoScriptGeneratorAgent:
     """
     to generate the video agent we reuquired:
         1. Prompt/script of the video
