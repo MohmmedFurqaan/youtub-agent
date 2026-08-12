@@ -19,8 +19,8 @@ from pathlib import Path
 
 import edge_tts
 import requests
-from model.utility.logging_config import setup_logging
-from model.utility.save_response import SaveLlmResponse
+from src.utility.logging_config import setup_logging
+from src.utility.save_response import SaveLlmResponse
 from mutagen.mp3 import MP3
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ class AssetGenerator:
         self.logger = setup_logging()
 
         # Resolve project-root-relative paths
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = Path(__file__).resolve().parents[3]
         self.scene_dir = project_root / "data" / "metadata" / "scene"
 
         # Ensure output directory exists
