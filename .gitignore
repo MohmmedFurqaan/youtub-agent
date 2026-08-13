@@ -17,7 +17,8 @@ model/utility/*.ipynb_checkpoints
 
 /model/__pycache__/
 /model/service/__pycache__/
-/data/llm_response.json
+
+data/
 /logs/
 /tests/
 .vscode

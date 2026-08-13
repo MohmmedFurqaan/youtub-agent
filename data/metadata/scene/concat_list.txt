@@ -1,4 +1,0 @@
-file '/media/farkan/WORK/start-up-idea/yt-agent/data/metadata/scene/scene_1.mp4'
-file '/media/farkan/WORK/start-up-idea/yt-agent/data/metadata/scene/scene_2.mp4'
-file '/media/farkan/WORK/start-up-idea/yt-agent/data/metadata/scene/scene_3.mp4'
-file '/media/farkan/WORK/start-up-idea/yt-agent/data/metadata/scene/scene_4.mp4'

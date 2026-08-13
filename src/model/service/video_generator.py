@@ -1,495 +1,280 @@
-from src.utility.load_envs import load_all_env
-from src.utility.logging_config import setup_logging
-from src.utility.save_response import SaveLlmResponse
+"""
+Seedance 2.5 Video Generator
+
+Orchestrates the end-to-end video generation workflow:
+    1. Build a comprehensive prompt from the video script
+    2. Submit a single 30-second generation task via SeedanceClient
+    3. Poll until the task completes
+    4. Download the resulting MP4
+
+This replaces the old Veo-based VideoGeneratorAgent with a cleaner,
+single-responsibility design that matches the Seedance 2.5 API contract.
+"""
+
 import json
-import http.client
 import time
-import subprocess
-import urllib.request
 from pathlib import Path
+
 import requests
 
+from src.model.client.seedance_client import SeedanceClient
+from src.utility.logging_config import setup_logging
 
-class VideoGeneratorAgent:
 
-    # Only use the cheapest model tier to conserve credits.
-    MODEL = "veo3_lite"
+class SeedanceVideoGenerator:
+    """Generates a single 30-second video from a structured video script.
 
-    # Polling config for waiting on task completion
-    POLL_INTERVAL_SECONDS = 30
-    POLL_MAX_ATTEMPTS = 40  # 40 x 30s = 20 min max wait
+    The generator consolidates the visual_bible and all scene descriptions
+    into one rich prompt, submits it to the Seedance 2.5 API, and downloads
+    the result.
 
-    def __init__(self, script: dict, KIE_API_KEY: str, script_id: str = None):
-        '''Initialize the video generator agent.
+    Attributes:
+        POLL_INTERVAL:  Seconds between status checks (default 30).
+        POLL_MAX:       Maximum polling attempts before timeout (default 40 → 20 min).
+    """
+
+    POLL_INTERVAL = 30
+    POLL_MAX = 40
+
+    def __init__(
+        self,
+        script: dict,
+        api_key: str,
+        script_id: str,
+        reference_image_urls: list[str] | None = None,
+    ):
+        """Initialize the video generator.
+
         Args:
-            script (dict): The structured video script containing
-                           visual_bible, scenes, video metadata, etc.
-            KIE_API_KEY (str): The Bearer token for api.kie.ai.
-            script_id (str): The unique ID from llm_response.json used for
-                             folder naming and metadata tracking.
-        '''
-        self.script = script
-        self.KIE_API_KEY = KIE_API_KEY
-        self.script_id = script_id
-        self.logger = setup_logging()
+            script:               Structured video script dict from the LLM.
+            api_key:              KIE API key for Seedance authentication.
+            script_id:            UUID from llm_response.json for folder naming.
+            reference_image_urls: Optional reference images for style/character guidance.
+        """
+        self._script = script
+        self._script_id = script_id
+        self._reference_image_urls = reference_image_urls or []
+        self._client = SeedanceClient(api_key)
+        self._logger = setup_logging(__name__)
 
-        # Stores the taskId chain: scene_number -> taskId
-        self.task_chain: dict[int, str] = {}
+        # Output directory: data/{script_id}/
+        self._project_root = Path(__file__).resolve().parents[3]
+        self._output_dir = self._project_root / "data" / self._script_id
+        self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Project root for file paths
-        self.project_root = Path(__file__).resolve().parents[3]
+    # ── Public API ───────────────────────────────────────────────────────────
 
-        # Directory layout:
-        #   data/metadata/scene/          -> individual scene clips
-        #   data/metadata/{id}_video/     -> final stitched video
-        self.scene_dir = self.project_root / "data" / "metadata" / "scene"
-        self.video_dir = self.project_root / "data" / "metadata" / f"{self.script_id}_video"
-        self.scene_dir.mkdir(parents=True, exist_ok=True)
-        self.video_dir.mkdir(parents=True, exist_ok=True)
+    def generate_video(self) -> dict:
+        """Run the full generation pipeline.
+
+        Returns:
+            Dict with keys:
+                - video_path: Absolute path to the downloaded MP4 (or None).
+                - task_id:    The Seedance task ID.
+                - state:      Final task state ("success" or "fail").
+                - error:      Error message if generation failed (or None).
+        """
+        # 1. Build prompt
+        prompt = self._build_prompt()
+        self._logger.info("[generator] Prompt built (%d chars)", len(prompt))
+
+        # 2. Extract video params from script
+        video_config = self._script.get("video", {})
+        aspect_ratio = video_config.get("aspect_ratio", "9:16")
+        resolution = video_config.get("resolution", "720p")
+        duration = video_config.get("target_duration", 30)
+
+        # Merge reference images from script + constructor
+        script_refs = self._script.get("reference_image_urls", [])
+        all_refs = list(set(self._reference_image_urls + script_refs))
+
+        # 3. Submit task
+        try:
+            task_id = self._client.create_task(
+                prompt=prompt,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
+                reference_image_urls=all_refs if all_refs else None,
+            )
+        except RuntimeError as e:
+            self._logger.error("[generator] Task creation failed: %s", e)
+            return {"video_path": None, "task_id": None, "state": "fail", "error": str(e)}
+
+        # 4. Poll until complete
+        result = self._poll_until_complete(task_id)
+        state = result.get("data", {}).get("state", "").lower()
+
+        if state != "success":
+            fail_msg = result.get("data", {}).get("failMsg", "Unknown error")
+            self._logger.error("[generator] Task %s failed: %s", task_id, fail_msg)
+            return {"video_path": None, "task_id": task_id, "state": state, "error": fail_msg}
+
+        # 5. Extract result URL and download
+        video_url = self._extract_result_url(result)
+        if not video_url:
+            return {
+                "video_path": None,
+                "task_id": task_id,
+                "state": "success",
+                "error": "No result URL in response",
+            }
+
+        video_path = self._download_video(video_url)
+        return {
+            "video_path": str(video_path) if video_path else None,
+            "task_id": task_id,
+            "state": "success",
+            "error": None,
+        }
 
 
-    def build_initial_prompt(self, visual_bible: dict, scene: dict) -> str:
-        '''Build the full prompt for Scene 1 (veo_initial).
-        Includes the visual bible so the model anchors on style from
-        the very first frame.
-        '''
-        return f"""\
-            VISUAL BIBLE — FOLLOW THESE RULES THROUGHOUT THE VIDEO
+    def _build_prompt(self) -> str:
+        """Consolidate the full script into a single Seedance prompt.
 
-            Visual Style:
-            {visual_bible["visual_style"]}
+        Combines the visual_bible directives with all scene descriptions
+        to produce one coherent generation prompt.
+        """
+        visual_bible = self._script.get("visual_bible", {})
+        scenes = self._script.get("scenes", [])
 
-            Environment:
-            {visual_bible["environment"]}
+        parts = []
 
-            Lighting:
-            {visual_bible["lighting"]}
+        # Visual identity
+        parts.append("VISUAL DIRECTION")
+        parts.append(f"Style: {visual_bible.get('visual_style', 'natural realistic')}")
+        parts.append(f"Environment: {visual_bible.get('environment', '')}")
+        parts.append(f"Lighting: {visual_bible.get('lighting', '')}")
 
-            Color Palette:
-            {", ".join(visual_bible["color_palette"])}
+        palette = visual_bible.get("color_palette", [])
+        if palette:
+            parts.append(f"Color Palette: {', '.join(palette)}")
 
-            Camera Style:
-            {visual_bible["camera_style"]}
+        parts.append(f"Camera: {visual_bible.get('camera_style', '')}")
 
-            Objects:
-            {", ".join(visual_bible["objects"])}
+        objects = visual_bible.get("objects", [])
+        if objects:
+            parts.append(f"Key Objects: {', '.join(objects)}")
 
-            Continuity Rules:
-            {chr(10).join(f"- {rule}" for rule in visual_bible["continuity_rules"])}
+        rules = visual_bible.get("continuity_rules", [])
+        if rules:
+            parts.append("Continuity Rules:")
+            for rule in rules:
+                parts.append(f"- {rule}")
 
-            SCENE {scene["scene_number"]}
+        # Reference images
+        refs = self._script.get("reference_image_urls", []) + self._reference_image_urls
+        if refs:
+            parts.append("")
+            parts.append("REFERENCE IMAGES")
+            for i, url in enumerate(refs, 1):
+                parts.append(f"@Image{i}: {url}")
 
-            Purpose:
-            {scene["purpose"]}
+        # Scene descriptions
+        parts.append("")
+        parts.append("VIDEO SEQUENCE (30 seconds total)")
 
-            Duration:
-            {scene["duration"]} seconds
+        for scene in scenes:
+            scene_num = scene.get("scene_number", "?")
+            duration = scene.get("duration", 7)
+            parts.append("")
+            parts.append(f"SCENE {scene_num} ({duration}s):")
+            parts.append(f"Purpose: {scene.get('purpose', '')}")
+            parts.append(f"Visual: {scene.get('background_prompt', '')}")
 
-            Visual Prompt:
-            {scene["background_prompt"]}
+        return "\n".join(parts)
 
-            Continuation:
-            {scene["continuation_instruction"]}
-            """
+
+    def _poll_until_complete(self, task_id: str) -> dict:
+        """Poll the Seedance API until the task reaches a terminal state.
+
+        Terminal states: "success", "fail".
+
+        Args:
+            task_id: The task ID to poll.
+
+        Returns:
+            The final API response dict.
+        """
+        self._logger.info("[poll] Waiting for task %s ...", task_id)
+
+        for attempt in range(1, self.POLL_MAX + 1):
+            time.sleep(self.POLL_INTERVAL)
+
+            resp = self._client.query_task(task_id)
+            data = resp.get("data", {})
+            state = str(data.get("state", "")).lower()
+
+            self._logger.info(
+                "[poll] Attempt %d/%d — taskId=%s state=%s",
+                attempt, self.POLL_MAX, task_id, state,
+            )
+
+            if state == "success":
+                self._logger.info("[poll] Task %s completed successfully.", task_id)
+                return resp
+
+            if state == "fail":
+                fail_msg = data.get("failMsg", "unknown")
+                self._logger.error("[poll] Task %s failed: %s", task_id, fail_msg)
+                return resp
+
+        self._logger.error("[poll] Task %s timed out after %d attempts.", task_id, self.POLL_MAX)
+        return {"code": 408, "msg": "Polling timed out", "data": {"taskId": task_id, "state": "timeout"}}
+
 
     @staticmethod
-    def build_extension_prompt(scene: dict) -> str:
-        '''Build the prompt for extension scenes (veo_extension).
-        Lighter than the initial prompt — the visual bible is already
-        baked into the base video.
-        '''
-        return f"""\
-        SCENE {scene["scene_number"]}
+    def _extract_result_url(resp: dict) -> str | None:
+        """Parse the resultJson field to extract the first video URL.
 
-        Purpose:
-        {scene["purpose"]}
-
-        Duration:
-        {scene["duration"]} seconds
-
-        Visual Prompt:
-        {scene["background_prompt"]}
-
-        Continuation:
-        {scene["continuation_instruction"]}
+        The Seedance API returns resultJson as a JSON string:
+            '{"resultUrls": ["https://..."]}'
         """
-
-    def _make_request(self, method: str, path: str, payload: dict | None = None) -> dict:
-        '''Low-level helper to talk to api.kie.ai and return parsed JSON.'''
-        conn = http.client.HTTPSConnection("api.kie.ai")
-        headers = {
-            'Authorization': f'Bearer {self.KIE_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-        body = json.dumps(payload) if payload else None
-        conn.request(method, path, body, headers)
-        res = conn.getresponse()
-        raw = res.read().decode("utf-8")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            self.logger.error(f"Non-JSON response from {path}: {raw[:500]}")
-            return {"code": 500, "msg": "Non-JSON response", "raw": raw}
-
-    def _base_agent_initializer(
-        self,
-        prompt: str,
-        generation_type: str,
-        aspect_ratio: str = "9:16",
-        enable_translation: bool = True,
-        duration: int = 8,
-        model: str = "lite",
-        watermark: str = "codewith__motiwala",
-    ) -> dict:
-        '''Generate an initial video clip via /api/v1/veo/generate.
-        Args:
-            prompt: The full visual prompt for the scene.
-            generation_type: e.g. "video".
-            aspect_ratio: Default 9:16 (shorts).
-            enable_translation: Let the API translate if needed.
-            duration: Clip duration in seconds.
-            model: Model tier — lite | fast | quality.
-            watermark: Watermark text overlay.
-        Returns:
-            Parsed JSON response from the API.
-        '''
-        payload = {
-            "prompt": prompt,
-            "model": model,
-            "watermark": watermark,
-            "aspect_ratio": aspect_ratio,
-            "enableFallback": False,
-            "enableTranslation": enable_translation,
-            "generationType": generation_type,
-        }
-        self.logger.info(f"[generate] Sending initial request with model={model}")
-        return self._make_request("POST", "/api/v1/veo/generate", payload)
-
-    def _extend_video(
-        self,
-        task_id: str,
-        prompt: str,
-        model: str = "lite",
-        seeds: int | None = None,
-        watermark: str = "codewith__motiwala",
-    ) -> dict:
-        '''Extend an existing video via /api/v1/veo/extend.
-        Args:
-            task_id: The taskId of the video to extend from.
-            prompt: Description of how to extend the video.
-            model: Model tier — lite | fast | quality.
-            seeds: Optional seed for reproducibility (10000-99999).
-            watermark: Watermark text overlay.
-        Returns:
-            Parsed JSON response from the API.
-        '''
-        payload = {
-            "taskId": task_id,
-            "prompt": prompt,
-            "model": model,
-        }
-        if watermark:
-            payload["watermark"] = watermark
-        if seeds is not None:
-            payload["seeds"] = max(10000, min(99999, seeds))
-
-        self.logger.info(f"[extend] Extending taskId={task_id} with model={model}")
-        return self._make_request("POST", "/api/v1/veo/extend", payload)
-
-    def _poll_task_status(self, task_id: str) -> dict:
-        '''Poll /api/v1/jobs/recordInfo until the task completes or fails.
-        Returns the final status response dict.
-
-        API Response format (from docs):
-        {
-            "code": 505,
-            "msg": "success",
-            "data": {
-                "taskId": "...",
-                "state": "success",
-                "resultJson": "{\"resultUrls\":[\"https://...\"]}",
-                "progress": 45,
-                ...
-            }
-        }
-        '''
-        self.logger.info(f"[poll] Waiting for taskId={task_id} ...")
-        for attempt in range(1, self.POLL_MAX_ATTEMPTS + 1):
-            time.sleep(self.POLL_INTERVAL_SECONDS)
-            resp = self._make_request("GET", f"/api/v1/jobs/recordInfo?taskId={task_id}")
-
-            # _make_request already returns parsed JSON dict
-            data = resp.get("data", {})
-            if not isinstance(data, dict):
-                data = {}
-
-            state = str(data.get("state", "")).lower()
-            progress = data.get("progress", "N/A")
-
-            self.logger.info(
-                f"[poll] attempt {attempt}/{self.POLL_MAX_ATTEMPTS}  "
-                f"taskId={task_id}  state={state}  progress={progress}  "
-                f"response_keys={list(data.keys())}"
-            )
-
-            # Parse resultJson if present (it's a JSON string)
-            result_urls = []
-            result_json_str = data.get("resultJson", "")
-            if result_json_str and isinstance(result_json_str, str):
-                try:
-                    result_data = json.loads(result_json_str)
-                    result_urls = result_data.get("resultUrls", [])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-            if state == "success" or result_urls:
-                self.logger.info(
-                    f"[poll] Task {task_id} completed. state={state} "
-                    f"result_urls={result_urls}"
-                )
-                # Attach parsed result URLs to the response for easy access
-                if "data" in resp and isinstance(resp["data"], dict):
-                    resp["data"]["_parsed_result_urls"] = result_urls
-                return resp
-            elif state in ("failed", "error", "rejected"):
-                fail_msg = data.get("failMsg", "unknown")
-                fail_code = data.get("failCode", "unknown")
-                self.logger.error(
-                    f"[poll] Task {task_id} failed: state={state} "
-                    f"failCode={fail_code} failMsg={fail_msg}"
-                )
-                return resp
-
-        self.logger.error(f"[poll] Task {task_id} timed out after {self.POLL_MAX_ATTEMPTS} attempts.")
-        return {"code": 408, "msg": "Polling timed out", "taskId": task_id}
-
-    def _download_scene_video(
-        self,
-        task_id: str,
-        scene_num: int,
-        status_resp: dict
-    ) -> Path | None:
-
-        data = status_resp.get("data", {})
-
-        # Already parsed by _poll_task_status()
-        result_urls = data.get("_parsed_result_urls", [])
-
-        if not result_urls:
-            self.logger.error(
-                f"[download] No result URL found for Scene {scene_num}"
-            )
+        result_json_str = resp.get("data", {}).get("resultJson", "")
+        if not result_json_str:
             return None
 
-        video_url = result_urls[0]
+        try:
+            result_data = json.loads(result_json_str)
+            urls = result_data.get("resultUrls", [])
+            return urls[0] if urls else None
+        except (json.JSONDecodeError, TypeError, IndexError):
+            return None
 
-        scene_file = self.scene_dir / f"scene_{scene_num}.mp4"
+    # ── Download ─────────────────────────────────────────────────────────────
 
-        self.logger.info(
-            f"[download] Downloading Scene {scene_num} -> {scene_file}"
-        )
-        self.logger.info(f"[download] URL: {video_url}")
+    def _download_video(self, url: str) -> Path | None:
+        """Download the generated video to the output directory.
 
-        
+        Args:
+            url: Direct URL to the MP4 file.
+
+        Returns:
+            Path to the saved file, or None on failure.
+        """
+        output_path = self._output_dir / "video.mp4"
+
+        self._logger.info("[download] Downloading video → %s", output_path)
+        self._logger.info("[download] URL: %s", url)
+
         try:
             response = requests.get(
-                video_url,
-                headers={
-                    "User-Agent": "Mozilla/5.0"
-                },
+                url,
+                headers={"User-Agent": "Mozilla/5.0"},
                 stream=True,
                 timeout=120,
             )
-
-            self.logger.info(
-                f"[download] HTTP status: {response.status_code}"
-            )
-
             response.raise_for_status()
 
-            with open(scene_file, "wb") as file:
+            with open(output_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     if chunk:
-                        file.write(chunk)
+                        f.write(chunk)
 
-            self.logger.info(
-                f"[download] Scene {scene_num} saved: "
-                f"{scene_file} ({scene_file.stat().st_size} bytes)"
-            )
-
-            return scene_file
-
-        except requests.RequestException as e:
-            self.logger.error(
-                f"[download] Failed to download Scene {scene_num}: {e}"
-            )
-            return None
-            
-    def stitch_scenes(self) -> Path | None:
-        '''Use FFmpeg to concatenate all scene clips into one final video.
-
-        Reads scene files from data/metadata/scene/ in order and writes
-        the stitched output to data/metadata/{script_id}_video/.
-
-        Returns:
-            Path to the final stitched video, or None on failure.
-        '''
-        # Collect scene files in order
-        scene_files = sorted(self.scene_dir.glob("scene_*.mp4"))
-
-        if not scene_files:
-            self.logger.error("[stitch] No scene files found to stitch.")
-            return None
-
-        self.logger.info(f"[stitch] Stitching {len(scene_files)} scene(s): {[f.name for f in scene_files]}")
-
-        # Build FFmpeg concat file list
-        concat_list_path = self.scene_dir / "concat_list.txt"
-        with open(concat_list_path, "w") as f:
-            for scene_file in scene_files:
-                # FFmpeg requires forward slashes and escaped single quotes
-                f.write(f"file '{scene_file.resolve()}'\n")
-
-        output_path = self.video_dir / f"{self.script_id}_final.mp4"
-
-        try:
-            result = subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-i", str(concat_list_path),
-                    "-c", "copy",
-                    output_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-            if result.returncode != 0:
-                self.logger.error(f"[stitch] FFmpeg failed:\n{result.stderr}")
-                # Fallback: re-encode if stream copy fails (codec mismatch)
-                self.logger.info("[stitch] Retrying with re-encode...")
-                result = subprocess.run(
-                    [
-                        "ffmpeg", "-y",
-                        "-f", "concat",
-                        "-safe", "0",
-                        "-i", str(concat_list_path),
-                        "-c:v", "libx264",
-                        "-preset", "fast",
-                        "-crf", "23",
-                        "-c:a", "aac",
-                        "-b:a", "128k",
-                        str(output_path),
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                )
-                if result.returncode != 0:
-                    self.logger.error(f"[stitch] Re-encode also failed:\n{result.stderr}")
-                    return None
-
-            self.logger.info(f"[stitch] Final video saved: {output_path} ({output_path.stat().st_size} bytes)")
+            size = output_path.stat().st_size
+            self._logger.info("[download] Saved: %s (%s bytes)", output_path, f"{size:,}")
             return output_path
 
-        except FileNotFoundError:
-            self.logger.error("[stitch] FFmpeg not found. Please install FFmpeg.")
+        except requests.RequestException as e:
+            self._logger.error("[download] Failed: %s", e)
             return None
-        except subprocess.TimeoutExpired:
-            self.logger.error("[stitch] FFmpeg timed out.")
-            return None
-
-    def generate_full_video(self) -> dict:
-        '''Walk through every scene in the script, generate video clips,
-        download each scene, and stitch them together with FFmpeg.
-
-        Returns a dict with:
-            task_chain: scene_number -> taskId
-            scene_files: scene_number -> file path
-            final_video: path to stitched video (or None)
-        '''
-        visual_bible = self.script["visual_bible"]
-        scenes = self.script["scenes"]
-        aspect_ratio = self.script.get("video", {}).get("aspect_ratio", "9:16")
-
-        previous_task_id = None
-        scene_files: dict[int, str] = {}
-
-        for scene in scenes:
-            scene_num = scene["scene_number"]
-            scene_type = scene.get("scene_type", "veo_extension")
-            duration = scene.get("duration", 8)
-
-            self.logger.info(f"\n{'='*50}")
-            self.logger.info(f"Processing Scene {scene_num}  type={scene_type}")
-            self.logger.info(f"{'='*50}")
-
-            # Scene 1: initial generation
-            if scene_type == "veo_initial" or previous_task_id is None:
-                prompt = self.build_initial_prompt(visual_bible, scene)
-                resp = self._base_agent_initializer(
-                    prompt=prompt,
-                    generation_type="video",
-                    aspect_ratio=aspect_ratio,
-                    duration=duration,
-                    model=self.MODEL,
-                )
-
-                if resp.get("code") != 200 or not resp.get("data", {}).get("taskId"):
-                    self.logger.error(f"Scene {scene_num}: Failed to generate video. Response: {resp}")
-                    return {"error": f"Failed to generate Scene {scene_num}", "response": resp}
-
-                task_id = resp["data"]["taskId"]
-                self.logger.info(f"Scene {scene_num}: Initial generation taskId = {task_id}")
-
-            # Scenes 2+: extension
-            else:
-                prompt = self.build_extension_prompt(scene)
-                resp = self._extend_video(
-                    task_id=previous_task_id,
-                    prompt=prompt
-                )
-
-                if resp.get("code") != 200 or not resp.get("data", {}).get("taskId"):
-                    self.logger.error(f"Scene {scene_num}: Failed to extend video. Response: {resp}")
-                    return {"error": f"Failed to extend Scene {scene_num}", "response": resp}
-
-                task_id = resp["data"]["taskId"]
-                self.logger.info(f"Scene {scene_num}: Extension taskId = {task_id}")
-
-            # Wait for the task to finish before extending further
-            status_resp = self._poll_task_status(task_id)
-            final_status = status_resp.get("data", {}).get("state", "").lower()
-
-            if final_status not in ("completed", "success", "done"):
-                self.logger.error(
-                    f"Scene {scene_num}: Task {task_id} did not complete "
-                    f"(status={final_status}). Stopping chain."
-                )
-                break
-
-            # Download the scene video
-            scene_path = self._download_scene_video(task_id, scene_num, status_resp)
-            if scene_path:
-                scene_files[scene_num] = str(scene_path)
-
-            # Record and advance the chain
-            self.task_chain[scene_num] = task_id
-            previous_task_id = task_id
-            self.logger.info(f"Scene {scene_num}: Done. taskId={task_id}")
-
-        self.logger.info(f"\nTask chain: {self.task_chain}")
-
-        # Stitch all downloaded scenes into one final video
-        final_video = None
-        if scene_files:
-            final_video = self.stitch_scenes()
-
-        return {
-            "task_chain": self.task_chain,
-            "scene_files": scene_files,
-            "final_video": str(final_video) if final_video else None,
-        }

@@ -1,220 +1,98 @@
-import subprocess
+"""
+YouTube Agent — Main Entry Point
+
+Pipeline:
+    Phase 1: Generate structured JSON video script via OpenRouter LLM
+    Phase 2: Generate a 30-second video via Seedance 2.5 API
+    Phase 3: Upload the video to YouTube with metadata from the script
+"""
+
 from pathlib import Path
 
+from src.utility.load_envs import load_all_env
 from src.utility.save_response import SaveLlmResponse
+from src.model.service.prompt_agent import VideoScriptGeneratorAgent
+from src.model.service.video_generator import SeedanceVideoGenerator
 from src.youtube.video_uploader import upload_video
 
 
-# ============================================================
-# STITCH EXISTING VIDEO SCENES ONLY
-# NO KIE
-# NO VEO
-# NO VIDEO GENERATION
-# ============================================================
+
+
+OPENROUTER_API_KEY, DEVMODE, OPENROUTER_MODEL_NAME, _, KIE_API_KEY = load_all_env()
+
 
 print("=" * 60)
-print("STITCHED VIDEO PIPELINE")
+print("PHASE 1 — Generating video script")
 print("=" * 60)
 
-# Read the latest generated script metadata
+script_agent = VideoScriptGeneratorAgent(
+    prompt_from_user="How chat messages app works through the system design concept",
+    DEVMODE=DEVMODE,
+    open_router_model_name=OPENROUTER_MODEL_NAME,
+)
+
+video_script = script_agent.video_script_generator()
+
+# Read the saved script with its UUID
 read_data = SaveLlmResponse()
 script_id, video_script = read_data.read_response_with_id()
 
-print(f"Script ID: {script_id}")
-print(f"Title: {video_script.get('title', 'N/A')}")
-
-
-# Project paths
-project_root = Path(__file__).resolve().parent
-
-scene_dir = project_root / "data" / "metadata" / "scene"
-
-output_dir = (
-    project_root
-    / "data"
-    / script_id
-)
-
-output_dir.mkdir(parents=True, exist_ok=True)
-
-concat_file = output_dir / "concat_list.txt"
-final_video = output_dir / "video.mp4"
-
-
-# ============================================================
-# FIND EXISTING SCENE VIDEOS
-# ============================================================
-
-scene_files = sorted(
-    scene_dir.glob("scene_*.mp4"),
-    key=lambda p: int(p.stem.split("_")[1])
-)
-
-if not scene_files:
-    print("\nERROR: No scene MP4 files found.")
-    print(f"Expected files inside: {scene_dir}")
-    exit(1)
-
-print(f"\nFound {len(scene_files)} scene videos:")
-
-for scene in scene_files:
-    print(f"  - {scene.name}")
-
-
-# ============================================================
-# CREATE FFMPEG CONCAT LIST
-# ============================================================
-
-with open(concat_file, "w", encoding="utf-8") as f:
-    for scene in scene_files:
-        # FFmpeg concat format requires forward slashes
-        path = scene.resolve().as_posix()
-
-        # Escape single quotes if ever present
-        path = path.replace("'", r"'\''")
-
-        f.write(f"file '{path}'\n")
-
-print(f"\nConcat list created:")
-print(f"  {concat_file}")
-
-
-# ============================================================
-# STITCH USING FFMPEG
-# ============================================================
-
-print("\nStitching videos with FFmpeg...")
-print("Please wait...\n")
-
-
-command = [
-    "ffmpeg",
-    "-y",
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    str(concat_file),
-    "-c",
-    "copy",
-    str(final_video),
-]
-
-result = subprocess.run(
-    command,
-    capture_output=True,
-    text=True,
-)
-
-
-# ============================================================
-# FALLBACK: RE-ENCODE IF STREAM COPY FAILS
-# ============================================================
-
-if result.returncode != 0:
-
-    print("Direct stitching failed.")
-    print("Retrying with H.264/AAC re-encoding...\n")
-
-    command = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(concat_file),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        str(final_video),
-    ]
-
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-    )
-
-
-# ============================================================
-# CHECK RESULT
-# ============================================================
-
-if result.returncode != 0:
-
-    print("\nERROR: FFmpeg failed.")
-    print(result.stderr)
-
-    exit(1)
+print(f"  Script ID:  {script_id}")
+print(f"  Title:      {video_script.get('title', 'N/A')}")
+print(f"  Scenes:     {len(video_script.get('scenes', []))}")
 
 
 print("\n" + "=" * 60)
-print("VIDEO STITCHING SUCCESSFUL")
+print("PHASE 2 — Generating 30s video via Seedance 2.5")
 print("=" * 60)
 
-print(f"\nFinal video:")
-print(f"  {final_video.resolve()}")
+generator = SeedanceVideoGenerator(
+    script=video_script,
+    api_key=KIE_API_KEY,
+    script_id=script_id,
+    reference_image_urls=video_script.get("reference_image_urls", []),
+)
 
-print(f"\nSize:")
-print(f"  {final_video.stat().st_size:,} bytes")
+result = generator.generate_video()
+
+if result.get("error"):
+    print(f"\nVideo generation failed: {result['error']}")
+    exit(1)
+
+video_path = Path(result["video_path"])
+
+print(f"\n  Task ID:    {result['task_id']}")
+print(f"  Video:      {video_path}")
+print(f"  Size:       {video_path.stat().st_size:,} bytes")
 
 
-# ============================================================
-# PREPARE YOUTUBE METADATA
-# ============================================================
 
+print("\n" + "=" * 60)
+print("PHASE 3 — Uploading to YouTube")
+print("=" * 60)
+
+youtube_meta = video_script.get("youtube", {})
+
+# Build description from youtube metadata + scene narrations
 narrations = [
     scene.get("narration", "")
     for scene in video_script.get("scenes", [])
     if scene.get("narration")
 ]
 
-description = (
-    f"{video_script.get('title', 'AI Generated Video')}\n\n"
-    + "\n".join(narrations)
-    + "\n\n#AI #Shorts #Automation"
-)
+description = youtube_meta.get("description", video_script.get("title", "AI Generated Video"))
+description += "\n\n" + "\n".join(narrations)
+description += "\n\n#AI #Shorts #Automation"
 
-tags = [
-    "AI",
-    "YouTube Agent",
-    "Automation",
-    "Shorts",
-]
-
-for scene in video_script.get("scenes", []):
-
-    on_screen = scene.get("on_screen_text", "")
-
-    if on_screen:
-        tags.append(on_screen.strip())
-
-
-# ============================================================
-# YOUTUBE UPLOAD
-# ============================================================
-
-print("\n" + "=" * 60)
-print("READY FOR YOUTUBE UPLOAD")
-print("=" * 60)
+tags = youtube_meta.get("tags", ["AI", "YouTube Agent", "Automation", "Shorts"])
 
 upload_video(
-    video_path=final_video,
-    title=video_script.get(
-        "title",
-        "AI Generated Video"
-    ),
+    video_path=video_path,
+    title=video_script.get("title", "AI Generated Video"),
     description=description,
     tags=tags,
+    category_id=youtube_meta.get("category_id", "22"),
     privacy_status="public",
 )
+
+print("\nDone.")
