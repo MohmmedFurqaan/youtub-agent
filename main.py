@@ -1,98 +1,169 @@
 """
-YouTube Agent — Main Entry Point
+main.py — YouTube Agent CLI
+
+Usage:
+    # Generate a video from a topic
+    uv run python main.py create --topic "How an API request works"
+
+    # Re-use a previously validated plan (skips LLM call)
+    uv run python main.py create --topic "..." --use-cached-plan data/runs/<id>/plan.json
+
+    # Upload a completed run (private by default)
+    uv run python main.py upload --run-id <id>
+
+    # Upload and make public
+    uv run python main.py upload --run-id <id> --publish
 
 Pipeline:
-    Phase 1: Generate structured JSON video script via OpenRouter LLM
-    Phase 2: Generate a 30-second video via Seedance 2.5 API
-    Phase 3: Upload the video to YouTube with metadata from the script
+    NVIDIA Nemotron (OpenRouter) → VideoPlan → Asset Resolver → TTS
+    → Remotion render → quality checks → YouTube upload (separate command)
+
+This project does NOT use text-to-video generation.
+Remotion composes licensed/static visual assets, programmatic diagrams,
+narration, captions, and overlays into the final MP4.
 """
 
+from __future__ import annotations
+
+import argparse
+import sys
 from pathlib import Path
 
 from src.utility.load_envs import load_all_env
-from src.utility.save_response import SaveLlmResponse
-from src.model.service.prompt_agent import VideoScriptGeneratorAgent
-from src.model.service.video_generator import SeedanceVideoGenerator
-from src.youtube.video_uploader import upload_video
+from src.utility.logging_config import setup_logging
+
+logger = setup_logging()
 
 
+def cmd_create(args: argparse.Namespace) -> int:
+    """Create command: generate plan → assets → TTS → render → quality check."""
+    from src.pipeline.run_pipeline import RunPipeline
+
+    OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, _ = load_all_env()
+
+    cached_plan = Path(args.use_cached_plan) if args.use_cached_plan else None
+    if cached_plan and not cached_plan.exists():
+        print(f"ERROR: --use-cached-plan file not found: {cached_plan}", file=sys.stderr)
+        return 1
+
+    pipeline = RunPipeline(
+        topic=args.topic,
+        open_router_model_name=OPENROUTER_MODEL_NAME,
+        cached_plan_path=cached_plan,
+    )
+
+    print("=" * 60)
+    print("yt-agent — Remotion Video Pipeline")
+    print("=" * 60)
+    print(f"  Topic:     {args.topic}")
+    print(f"  Run ID:    {pipeline.run_id}")
+    if cached_plan:
+        print(f"  Plan:      {cached_plan} (cached)")
+    print("=" * 60)
+
+    try:
+        mp4_path = pipeline.execute()
+        print("\n" + "=" * 60)
+        print("  ✓ Render complete")
+        print(f"  Output: {mp4_path}")
+        print(f"  Run ID: {pipeline.run_id}")
+        print("\nTo upload:")
+        print(f"  uv run python main.py upload --run-id {pipeline.run_id}")
+        print("=" * 60)
+        return 0
+    except Exception as exc:
+        print(f"\nERROR: {exc}", file=sys.stderr)
+        logger.exception("Pipeline failed")
+        return 1
 
 
-OPENROUTER_API_KEY, DEVMODE, OPENROUTER_MODEL_NAME, _, KIE_API_KEY = load_all_env()
+def cmd_upload(args: argparse.Namespace) -> int:
+    """Upload command: quality-check then upload an approved run to YouTube."""
+    from pathlib import Path as _Path
+    from src.pipeline.quality_checks import assert_run_ready_to_upload, QualityCheckError
+    from src.youtube.video_uploader import upload_video
+
+    _, _, youtube_config = load_all_env()
+
+    run_dir = Path("data") / "runs" / args.run_id
+    if not run_dir.exists():
+        print(f"ERROR: Run directory not found: {run_dir}", file=sys.stderr)
+        return 1
+
+    # Quality gate
+    try:
+        assert_run_ready_to_upload(run_dir)
+    except QualityCheckError as exc:
+        print(f"\nQuality check failed — upload blocked:\n{exc}", file=sys.stderr)
+        return 1
+
+    privacy = "public" if args.publish else "private"
+
+    print("=" * 60)
+    print(f"  Uploading run: {args.run_id}")
+    print(f"  Privacy:       {privacy.upper()}")
+    print("=" * 60)
+
+    try:
+        upload_video(
+            run_id=args.run_id,
+            run_dir=run_dir,
+            youtube_config=youtube_config,
+            privacy_status=privacy,
+        )
+        return 0
+    except Exception as exc:
+        print(f"\nERROR: Upload failed: {exc}", file=sys.stderr)
+        logger.exception("Upload failed")
+        return 1
 
 
-print("=" * 60)
-print("PHASE 1 — Generating video script")
-print("=" * 60)
-
-script_agent = VideoScriptGeneratorAgent(
-    prompt_from_user="How chat messages app works through the system design concept",
-    DEVMODE=DEVMODE,
-    open_router_model_name=OPENROUTER_MODEL_NAME,
-)
-
-video_script = script_agent.video_script_generator()
-
-# Read the saved script with its UUID
-read_data = SaveLlmResponse()
-script_id, video_script = read_data.read_response_with_id()
-
-print(f"  Script ID:  {script_id}")
-print(f"  Title:      {video_script.get('title', 'N/A')}")
-print(f"  Scenes:     {len(video_script.get('scenes', []))}")
+# ── Argument parser ───────────────────────────────────────────────────────────
 
 
-print("\n" + "=" * 60)
-print("PHASE 2 — Generating 30s video via Seedance 2.5")
-print("=" * 60)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="yt-agent",
+        description="YouTube Short generator — Remotion pipeline (no text-to-video APIs).",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
 
-generator = SeedanceVideoGenerator(
-    script=video_script,
-    api_key=KIE_API_KEY,
-    script_id=script_id,
-    reference_image_urls=video_script.get("reference_image_urls", []),
-)
+    # create
+    create_p = sub.add_parser("create", help="Generate a video from a topic.")
+    create_p.add_argument(
+        "--topic",
+        required=True,
+        help='The video topic, e.g. "How an API request works"',
+    )
+    create_p.add_argument(
+        "--use-cached-plan",
+        metavar="PATH",
+        default=None,
+        help="Skip LLM call and use an existing plan.json file.",
+    )
 
-result = generator.generate_video()
+    # upload
+    upload_p = sub.add_parser("upload", help="Upload a completed run to YouTube.")
+    upload_p.add_argument(
+        "--run-id",
+        required=True,
+        help="The UUID of the completed run to upload.",
+    )
+    upload_p.add_argument(
+        "--publish",
+        action="store_true",
+        default=False,
+        help="Make the video public (default: private).",
+    )
 
-if result.get("error"):
-    print(f"\nVideo generation failed: {result['error']}")
-    exit(1)
-
-video_path = Path(result["video_path"])
-
-print(f"\n  Task ID:    {result['task_id']}")
-print(f"  Video:      {video_path}")
-print(f"  Size:       {video_path.stat().st_size:,} bytes")
+    return parser
 
 
+if __name__ == "__main__":
+    parser = build_parser()
+    args = parser.parse_args()
 
-print("\n" + "=" * 60)
-print("PHASE 3 — Uploading to YouTube")
-print("=" * 60)
-
-youtube_meta = video_script.get("youtube", {})
-
-# Build description from youtube metadata + scene narrations
-narrations = [
-    scene.get("narration", "")
-    for scene in video_script.get("scenes", [])
-    if scene.get("narration")
-]
-
-description = youtube_meta.get("description", video_script.get("title", "AI Generated Video"))
-description += "\n\n" + "\n".join(narrations)
-description += "\n\n#AI #Shorts #Automation"
-
-tags = youtube_meta.get("tags", ["AI", "YouTube Agent", "Automation", "Shorts"])
-
-upload_video(
-    video_path=video_path,
-    title=video_script.get("title", "AI Generated Video"),
-    description=description,
-    tags=tags,
-    category_id=youtube_meta.get("category_id", "22"),
-    privacy_status="public",
-)
-
-print("\nDone.")
+    if args.command == "create":
+        sys.exit(cmd_create(args))
+    elif args.command == "upload":
+        sys.exit(cmd_upload(args))

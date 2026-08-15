@@ -14,7 +14,13 @@ dependencies = [
     "langchain-openrouter>=0.2.7",
     "mutagen>=1.48.1",
     "python-dotenv>=1.2.2",
+    "pydantic>=2",
     "requests>=2.34.2",
     "tavily-python>=0.7.26",
     "tornado>=6.5.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]

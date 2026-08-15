@@ -31,3 +31,8 @@ youtube-cost-break-down.ods
 # YouTube OAuth credentials
 credentials.json
 token.json
+/video-renderer/node_modules/
+/video-renderer/.agents/skills/
+/video-renderer/.claude/skills/
+/video-renderer/skills-lock.json
+/.pytest_cache/
