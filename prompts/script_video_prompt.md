@@ -50,12 +50,13 @@ The JSON must match this exact schema:
         "kind": "diagram",
         "query": "...",
         "required": true,
-        // If `kind` is "diagram" you MUST include a typed diagram payload
-        // rather than asking for an image. The diagram object must be:
-        // "template": one of ["request-flow","architecture-layers","sequence","comparison","timeline","concept-card","metric-chart"]
-        // "data": { "nodes": [{"id","label","icon"}], "edges": [{"from","to","label"}], "highlightEdge": <optional index> }
-        // Supported icon names (must be one of these):
-        // ["smartphone","monitor","server","database","cloud","user","lock","shield","globe","code","gitBranch","message","zap","activity"]
+        "background": "midnight-blue",
+        "template": "request-flow",
+        "data": {
+          "nodes": [{"id": "a", "label": "Client", "icon": "smartphone"}, {"id": "b", "label": "API", "icon": "server"}],
+          "edges": [{"from": "a", "to": "b", "label": "request"}],
+          "highlightEdge": 0
+        }
       },
       "transition": "cut"
     }
@@ -130,7 +131,7 @@ Bad examples: "How the API sends your request" (too long), "API" (too short)
 The `visual` object describes what Remotion should display — it is NOT a
 text-to-video prompt and must NOT reference any video generation service.
 
-`kind` options:
+`kind` MUST be one of:
   "diagram"        — Remotion draws a text + icon SVG layout directly.
                      Use for technical flows, architecture, concepts.
   "image"          — A still background image (resolved from library or generated).
@@ -138,15 +139,55 @@ text-to-video prompt and must NOT reference any video generation service.
   "stock_video"    — A local licensed stock video clip.
   "screen_capture" — A local screen-recording clip.
 
+IMPORTANT: never set `kind` to a diagram template name like "comparison" or
+"concept-card". Those are valid only in `visual.template` when `kind` is "diagram".
+
+`background` — optional scene-specific mood for the diagram/still background.
+Use one of: ["midnight-blue","deep-purple","teal","amber","slate","graphite"].
+Pick the background to match the scene's emotional signal:
+- "midnight-blue" for neutral technical flows
+- "deep-purple" for advanced concepts or innovation
+- "teal" for architecture / cloud / systems
+- "amber" for warnings / critical insights
+- "slate" for explanations / overviews
+- "graphite" for dark premium minimal scenes
+
+`template` — required when `kind` is "diagram" and must be one of:
+  ["request-flow","architecture-layers","sequence","comparison","timeline",
+   "concept-card","metric-chart"]
+
+`data.nodes[].icon` — choose the most meaningful icon for each node from this list:
+  ["smartphone","monitor","server","database","cloud","user","lock","shield","globe","code","gitBranch","message","zap","activity"]
+Use fewer, more distinctive icons per scene. Strong icon selection makes the diagram look deliberate and premium.
+
 `query` — provider-neutral description used by the asset resolver.
            Describe WHAT should be shown, not HOW to generate it.
            Minimum 5 words.
+
+Critical story rule: each scene must match the narration beat-for-beat.
+- If narration says the user clicks a URL, the visual must show a browser/URL area and an animated pointer/click action.
+- If narration says the request goes to the server, the diagram must animate the request arrow from client to server and highlight the active edge.
+- If narration says the server responds, the visual must emphasize the response direction and the resulting payload.
+- On-screen text should support the action, not repeat the entire narration.
 
 Good query for diagram: "Phone sends HTTP request through API gateway to server"
 Good query for image:   "Modern data center aisle with glowing server racks, dark blue"
 
 Prefer "diagram" for technical explanations — it renders crisply at 1080×1920
 and requires no external API call.
+
+Scene design rule: structure each scene around a visible event, not a generic static summary.
+Use dynamic diagrams with a clear start, movement, and result.
+For request-flow scenes, include data.nodes that show the request path
+and set the `highlightEdge` index to the currently active connection.
+Use varied templates across the 4 scenes instead of repeating the same one,
+for example: request-flow, sequence, architecture-layers, and comparison.
+Example:
+  "nodes": [{"id": "user", "label": "URL", "icon": "globe"}, {"id": "browser", "label": "Browser", "icon": "smartphone"}, {"id": "api", "label": "API", "icon": "server"}, {"id": "server", "label": "Server", "icon": "database"}],
+  "edges": [{"from": "user", "to": "browser", "label": "click"}, {"from": "browser", "to": "api", "label": "request"}, {"from": "api", "to": "server", "label": "fetch"}],
+  "highlightEdge": 1
+
+This makes the visual choreography read like the narration instead of a static diagram.
 
 ---
 

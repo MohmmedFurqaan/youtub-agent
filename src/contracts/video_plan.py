@@ -31,11 +31,15 @@ class VisualAsset(BaseModel):
         Provider-neutral description used by the asset resolver.
     required:
         If True, the pipeline fails when this asset cannot be resolved.
+    background:
+        Optional color treatment for the scene's background. Helps Remotion
+        create more dynamic visuals for each diagram or still image.
     """
 
     kind: Literal["stock_video", "image", "diagram", "screen_capture"]
     query: str = Field(..., min_length=5)
     required: bool = True
+    background: str | None = None
 
     # Diagram-specific (optional unless kind == 'diagram')
     template: str | None = None

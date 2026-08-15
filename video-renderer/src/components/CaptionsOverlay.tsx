@@ -12,6 +12,7 @@
 
 import React from "react";
 import { useCurrentFrame, useVideoConfig, interpolate } from "remotion";
+import { SAFE_AREAS } from "./SafeAreas";
 import type { Caption } from "../schemas";
 
 interface Props {
@@ -56,7 +57,7 @@ export const CaptionsOverlay: React.FC<Props> = ({ captions }) => {
     <div
       style={{
         position: "absolute",
-        bottom: 120,           // safe area above bottom edge
+        bottom: SAFE_AREAS.captions.bottom,           // safe area above bottom edge
         left: 0,
         right: 0,
         display: "flex",
@@ -68,21 +69,22 @@ export const CaptionsOverlay: React.FC<Props> = ({ captions }) => {
     >
       <div
         style={{
-          background: "rgba(0, 0, 0, 0.72)",
-          borderRadius: 12,
-          padding: "14px 36px",
-          maxWidth: "80%",
+          background: "rgba(15, 23, 42, 0.74)",
+          borderRadius: 14,
+          border: "1px solid rgba(148, 163, 184, 0.4)",
+          padding: "16px 30px",
+          maxWidth: "82%",
         }}
       >
         <span
           style={{
             fontFamily: "'Arial', sans-serif",
-            fontSize: 52,
+            fontSize: 44,
             fontWeight: 700,
             color: "#ffffff",
             textAlign: "center",
             display: "block",
-            lineHeight: 1.3,
+            lineHeight: 1.2,
             textShadow: "0 2px 8px rgba(0,0,0,0.8)",
           }}
         >

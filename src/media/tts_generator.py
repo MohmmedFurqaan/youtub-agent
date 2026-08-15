@@ -5,10 +5,10 @@ Generates a single narration MP3 for the entire video by concatenating all
 scene narrations in plan order, then produces captions.json.
 
 Architecture:
-    All scene narrations → edge-tts → data/runs/<run-id>/audio/narration.mp3
-                                   → data/runs/<run-id>/captions.json
+    All scene narrations → Kokoro-82M → data/runs/<run-id>/audio/narration.mp3
+                                      → data/runs/<run-id>/captions.json
 
-No per-scene MP3 files are created.  Remotion receives one audio file and
+No per-scene MP3 files are created. Remotion receives one audio file and
 uses captions timestamps to sync text display.
 
 Fails the run if narration exceeds 30 seconds — never silently speeds audio.
@@ -17,10 +17,18 @@ Fails the run if narration exceeds 30 seconds — never silently speeds audio.
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 
-import edge_tts
+import numpy as np
 from mutagen.mp3 import MP3
+
+try:
+    import soundfile as sf
+    from kokoro import KPipeline
+except ImportError:  # pragma: no cover - surfaced at runtime when package missing
+    sf = None
+    KPipeline = None
 
 from src.contracts.video_plan import VideoPlan
 from src.media.captions import (
@@ -37,6 +45,7 @@ logger = setup_logging()
 # Hard limit: narration may not exceed 30.5 s (0.5 s tolerance)
 MAX_NARRATION_DURATION_S = 30.5
 FPS = 30
+KOKORO_SAMPLE_RATE = 24000
 
 
 class TTSResult:
@@ -77,8 +86,14 @@ class NarrationGenerator:
         full_narration = self._build_full_narration()
         logger.info("[tts] Full narration (%d chars): %s…", len(full_narration), full_narration[:80])
 
+        target_duration_ms = int(getattr(self.plan, "target_duration_ms", 30000) or 30000)
         word_events = asyncio.run(
-            self._generate_tts_with_events(full_narration, self.plan.voice, str(self.mp3_path))
+            self._generate_tts_with_events(
+                full_narration,
+                self.plan.voice,
+                str(self.mp3_path),
+                target_duration_ms=target_duration_ms,
+            )
         )
         logger.info("[tts] narration.mp3 saved → %s", self.mp3_path)
 
@@ -100,7 +115,7 @@ class NarrationGenerator:
             logger.warning("[tts] No word-boundary events; falling back to even distribution.")
             captions = build_captions_from_narration(full_narration, duration_ms)
 
-        validate_captions(captions, total_duration_ms=30000)
+        validate_captions(captions, total_duration_ms=target_duration_ms)
         save_captions(captions, self.captions_path)
         logger.info("[tts] captions.json saved → %s", self.captions_path)
 
@@ -118,34 +133,124 @@ class NarrationGenerator:
         return "  ".join(parts)  # double-space → slight TTS pause
 
     @staticmethod
+    def _resolve_voice(voice: str) -> str:
+        """Map Azure-style voice IDs to Kokoro voice names."""
+        normalized = (voice or "").strip().lower()
+
+        if normalized.startswith("en-gb"):
+            return "bf_emma"
+        if "aria" in normalized or "christopher" in normalized or "jenny" in normalized:
+            return "af_heart"
+        if "ryan" in normalized:
+            return "bf_emma"
+        return "af_heart"
+
+    @staticmethod
+    def _resolve_lang_code(voice: str) -> str:
+        """Use American or British English phonemizer profiles for Kokoro."""
+        return "b" if (voice or "").strip().lower().startswith("en-gb") else "a"
+
+    @staticmethod
+    def _estimate_word_events(text: str, duration_ms: int) -> list[dict]:
+        """Approximate word timings when Kokoro does not emit boundary events."""
+        words = text.split()
+        if not words:
+            return []
+
+        word_events: list[dict] = []
+        ms_per_word = duration_ms / len(words)
+        for index, word in enumerate(words):
+            start_ms = int(index * ms_per_word)
+            end_ms = int((index + 1) * ms_per_word)
+            if end_ms <= start_ms:
+                end_ms = start_ms + 100
+            word_events.append({
+                "type": "WordBoundary",
+                "offset": start_ms * 10_000,
+                "duration": (end_ms - start_ms) * 10_000,
+                "text": word,
+            })
+        return word_events
+
+    @staticmethod
+    def _pad_audio_to_duration(audio: np.ndarray, target_duration_ms: int, sample_rate: int) -> np.ndarray:
+        """Pad a float32 audio array with silence so it reaches the target length."""
+        if target_duration_ms <= 0:
+            return audio
+        current_samples = audio.shape[0]
+        target_samples = max(1, int((target_duration_ms / 1000) * sample_rate))
+        if current_samples >= target_samples:
+            return audio[:target_samples]
+        silence = np.zeros(target_samples - current_samples, dtype=audio.dtype)
+        return np.concatenate([audio, silence])
+
+    @staticmethod
     async def _generate_tts_with_events(
         text: str,
         voice: str,
         output_path: str,
+        target_duration_ms: int | None = None,
     ) -> list[dict]:
-        """Run edge-tts and collect word-boundary events.
+        """Generate narration with Kokoro and return approximate word timings."""
+        if KPipeline is None or sf is None:
+            raise RuntimeError(
+                "Kokoro TTS requires the `kokoro` and `soundfile` packages. "
+                "Install them and ensure `espeak-ng` is available."
+            )
 
-        Returns:
-            List of word-boundary event dicts.  May be empty if the provider
-            does not emit them (handled by the caller).
-        """
-        communicate = edge_tts.Communicate(text=text, voice=voice)
-        word_events: list[dict] = []
+        lang_code = NarrationGenerator._resolve_lang_code(voice)
+        resolved_voice = NarrationGenerator._resolve_voice(voice)
+        logger.info("[tts] Using Kokoro model -> lang_code=%s, voice=%s", lang_code, resolved_voice)
 
-        # Collect word boundary events while saving audio
-        with open(output_path, "wb") as audio_file:
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_file.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    word_events.append({
-                        "type": "WordBoundary",
-                        "offset": chunk.get("offset", 0),
-                        "duration": chunk.get("duration", 0),
-                        "text": chunk.get("text", ""),
-                    })
+        pipeline = KPipeline(lang_code=lang_code)
+        generator = pipeline(text, voice=resolved_voice, speed=1, split_pattern=r"\n+")
 
-        return word_events
+        chunks: list[np.ndarray] = []
+        for _, _, audio in generator:
+            chunks.append(np.asarray(audio, dtype=np.float32))
+
+        if not chunks:
+            raise RuntimeError("Kokoro returned no audio for the narration.")
+
+        audio = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
+        target_ms = int(target_duration_ms or 30000)
+        if target_ms > 0:
+            audio = NarrationGenerator._pad_audio_to_duration(audio, target_ms, KOKORO_SAMPLE_RATE)
+
+        wav_path = Path(output_path).with_suffix(".wav")
+        sf.write(str(wav_path), audio, KOKORO_SAMPLE_RATE)
+
+        mp3_path = Path(output_path)
+        ffmpeg_bin = "ffmpeg"
+        duration_seconds = max(0.001, (target_ms or 30000) / 1000)
+        try:
+            subprocess.run(
+                [
+                    ffmpeg_bin,
+                    "-y",
+                    "-i",
+                    str(wav_path),
+                    "-t",
+                    f"{duration_seconds:.3f}",
+                    "-codec:a",
+                    "libmp3lame",
+                    "-q:a",
+                    "2",
+                    str(mp3_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        finally:
+            if wav_path.exists():
+                wav_path.unlink(missing_ok=True)
+
+        duration_ms = int((len(audio) / KOKORO_SAMPLE_RATE) * 1000)
+        timing_duration_ms = max(duration_ms, 1)
+        if target_ms > duration_ms:
+            timing_duration_ms = target_ms
+        return NarrationGenerator._estimate_word_events(text, timing_duration_ms)
 
     @staticmethod
     def _measure_duration(mp3_path: Path) -> float:

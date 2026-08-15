@@ -153,3 +153,34 @@ class TestQualityCheckFailures:
         checker = QualityChecker(mp4, run_dir)
         checker._check_assets_resolved()
         assert any("scene-01" in e for e in checker.errors)
+
+    def test_native_diagram_scene_creates_asset_manifest(self, tmp_path):
+        from src.contracts.video_plan import Scene, VisualAsset
+
+        run_dir = tmp_path / "runs" / "native-test"
+        run_dir.mkdir(parents=True)
+        assets_dir = run_dir / "assets"
+        assets_dir.mkdir(parents=True)
+
+        scene = Scene(
+            id="scene-01",
+            start_ms=0,
+            end_ms=8000,
+            narration="The client sends a request.",
+            on_screen_text="REQUEST SENT",
+            visual=VisualAsset(
+                kind="diagram",
+                query="phone sends request to API gateway",
+                template="request-flow",
+                data={
+                    "nodes": [{"id": "a", "label": "Client", "icon": "smartphone"}],
+                    "edges": [{"from": "a", "to": "b", "label": "request"}],
+                },
+            ),
+            transition="cut",
+        )
+
+        orchestrator = __import__("src.media.asset_resolver", fromlist=["AssetOrchestrator"]).AssetOrchestrator(run_dir)
+        result = orchestrator._resolve_one(scene)
+        assert result is None
+        assert (run_dir / "assets" / "scene-01" / "asset.json").exists()

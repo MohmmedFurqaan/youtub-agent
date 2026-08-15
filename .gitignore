@@ -36,3 +36,7 @@ token.json
 /video-renderer/.claude/skills/
 /video-renderer/skills-lock.json
 /.pytest_cache/
+/video-renderer/public/runs/
+/video-renderer/verif_frames_fb1/
+/video-renderer/verif_frames_fb1_timeline/
+/video-renderer/verif_frames_fb1_timeline_v2/

@@ -5,6 +5,7 @@ Unit tests for VideoPlan Pydantic contract and validate_video_plan().
 Run with:  uv run pytest test/test_video_plan.py -v
 """
 
+import numpy as np
 import pytest
 
 from src.contracts.video_plan import (
@@ -14,6 +15,7 @@ from src.contracts.video_plan import (
     YouTubeMetadata,
     validate_video_plan,
 )
+from src.model.service.prompt_agent import VideoScriptGeneratorAgent
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -44,7 +46,16 @@ def _make_scenes(count: int = 4) -> list[dict]:
             "end_ms": boundaries[i + 1],
             "narration": "Your phone sends a request to the API.",
             "on_screen_text": "REQUEST SENT",
-            "visual": {"kind": "diagram", "query": "phone-to-API flow, dark style"},
+            "visual": {
+                "kind": "diagram",
+                "query": "phone-to-API flow, dark style",
+                "template": "request-flow",
+                "data": {
+                    "nodes": [{"id": "a", "label": "Client", "icon": "smartphone"},{"id": "b", "label": "API", "icon": "server"}],
+                    "edges": [{"from": "a", "to": "b", "label": "request"}],
+                    "highlightEdge": 0,
+                },
+            },
             "transition": "cut",
         })
     return scenes
@@ -80,6 +91,21 @@ class TestValidPlan:
         assert plan.target_duration_ms == 30000
         assert plan.voice == "en-US-ChristopherNeural"
         assert plan.aspect_ratio == "9:16"
+
+    def test_visual_background_is_supported(self):
+        data = _make_valid_plan()
+        data["scenes"][0]["visual"]["background"] = "midnight-blue"
+        plan = VideoPlan.model_validate(data)
+        assert plan.scenes[0].visual.background == "midnight-blue"
+
+    def test_narration_is_padded_to_target_duration(self):
+        from src.media.tts_generator import NarrationGenerator
+
+        short_audio = np.zeros(24000, dtype=np.float32)
+        padded = NarrationGenerator._pad_audio_to_duration(short_audio, 30000, 24000)
+
+        assert len(padded) == 720000
+        assert padded.shape[0] == 720000
 
     def test_scene_duration_in_range(self):
         """Each scene in the 4-scene fixture is 7–8 s — within 4–10 s."""
@@ -198,3 +224,36 @@ class TestSceneValidation:
         data["scenes"][0]["end_ms"] = 20000  # 20 s — above 10 s maximum
         with pytest.raises(ValueError, match="4–10 second"):
             VideoPlan.model_validate(data)
+
+
+def test_invalid_diagram_template_is_normalized_to_kind_diagram():
+    plan = {
+        "schema_version": "1.0",
+        "topic": "How APIs work",
+        "youtube": _make_youtube(),
+        "scenes": [],
+    }
+
+    for i, end_ms in enumerate([8000, 15000, 22000, 30000], start=1):
+        start_ms = 0 if i == 1 else plan["scenes"][-1]["end_ms"]
+        plan["scenes"].append({
+            "id": f"scene-0{i}",
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "narration": "The client sends a request.",
+            "on_screen_text": "REQUEST SENT",
+            "visual": {
+                "kind": "comparison",
+                "query": "phone sends request to API gateway",
+                "template": "comparison",
+                "data": {"nodes": [{"id": "a", "label": "Client", "icon": "smartphone"}], "edges": []},
+            },
+            "transition": "cut",
+        })
+
+    normalized = VideoScriptGeneratorAgent._repair_invalid_visual_schema(plan)
+    assert normalized["scenes"][0]["visual"]["kind"] == "diagram"
+    assert normalized["scenes"][0]["visual"]["template"] == "comparison"
+
+    validated = VideoPlan.model_validate(normalized)
+    validate_video_plan(validated)

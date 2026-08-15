@@ -126,7 +126,9 @@ class VideoScriptGeneratorAgent:
         cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE).strip()
 
         try:
-            plan = VideoPlan.model_validate_json(cleaned)
+            payload = json.loads(cleaned)
+            payload = self._repair_invalid_visual_schema(payload)
+            plan = VideoPlan.model_validate(payload)
         except Exception as exc:
             self.logger.error(
                 "[prompt_agent] JSON parse / validation failed:\n%s\n\nRaw content:\n%s",
@@ -146,6 +148,41 @@ class VideoScriptGeneratorAgent:
             len(plan.scenes),
             plan.topic,
         )
+        return plan
+
+    @staticmethod
+    def _repair_invalid_visual_schema(plan: dict) -> dict:
+        """Normalize mistaken diagram template names that the model emitted as kind values."""
+        valid_kinds = {"diagram", "image", "stock_video", "screen_capture"}
+        diagram_templates = {
+            "request-flow",
+            "architecture-layers",
+            "sequence",
+            "comparison",
+            "timeline",
+            "concept-card",
+            "metric-chart",
+        }
+
+        for scene in plan.get("scenes", []):
+            visual = scene.get("visual")
+            if not isinstance(visual, dict):
+                continue
+
+            kind = visual.get("kind")
+            template = visual.get("template")
+            if kind in valid_kinds:
+                continue
+
+            if kind in diagram_templates:
+                visual["kind"] = "diagram"
+                visual.setdefault("template", kind)
+                continue
+
+            if isinstance(template, str) and template in diagram_templates:
+                visual["kind"] = "diagram"
+                continue
+
         return plan
 
     @staticmethod

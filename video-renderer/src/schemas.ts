@@ -26,6 +26,7 @@ export const scenePropSchema = z.object({
   assetKind: z.enum(["stock_video", "image", "diagram", "screen_capture"]),
   onScreenText: z.string(),
   transition: z.enum(["cut", "fade", "slide"]),
+  background: z.string().optional(),
   // Optional typed diagram payload for Remotion-native diagrams
   diagram: z
     .object({
@@ -50,6 +51,31 @@ export const scenePropSchema = z.object({
           z.object({ from: z.string(), to: z.string(), label: z.string().optional() })
         ),
         highlightEdge: z.number().int().nonnegative().optional(),
+        /** Animation timeline attached to this diagram. Times are ms relative to scene start */
+        animationTimeline: z
+          .array(
+            z.object({
+              atMs: z.number().int().nonnegative(),
+              durationMs: z.number().int().positive(),
+              type: z.enum([
+                "enter",
+                "exit",
+                "highlight-node",
+                "highlight-edge",
+                "move-packet",
+                "cursor-move",
+                "click",
+                "type",
+                "show-data",
+                "pulse",
+              ]),
+              target: z.string().optional(),
+              from: z.string().optional(),
+              to: z.string().optional(),
+              text: z.string().optional(),
+            })
+          )
+          .optional(),
       }),
     })
     .optional(),

@@ -52,24 +52,24 @@ def cmd_create(args: argparse.Namespace) -> int:
         cached_plan_path=cached_plan,
     )
 
-    print("=" * 60)
+
     print("yt-agent — Remotion Video Pipeline")
-    print("=" * 60)
+
     print(f"  Topic:     {args.topic}")
     print(f"  Run ID:    {pipeline.run_id}")
     if cached_plan:
         print(f"  Plan:      {cached_plan} (cached)")
-    print("=" * 60)
+
 
     try:
         mp4_path = pipeline.execute()
-        print("\n" + "=" * 60)
         print("  ✓ Render complete")
         print(f"  Output: {mp4_path}")
         print(f"  Run ID: {pipeline.run_id}")
         print("\nTo upload:")
-        print(f"  uv run python main.py upload --run-id {pipeline.run_id}")
-        print("=" * 60)
+        print(f"  uv run python main.py upload --run-id {pipeline.run_id} [for PRIVATE upload]")
+        print(f"  uv run python main.py upload --run-id {pipeline.run_id} --publish [for PUBLIC upload]")
+        
         return 0
     except Exception as exc:
         print(f"\nERROR: {exc}", file=sys.stderr)

@@ -36,22 +36,42 @@ def _make_plan() -> VideoPlan:
             {
                 "id": "scene-01", "start_ms": 0, "end_ms": 8000,
                 "narration": "Your phone sends a request.", "on_screen_text": "REQUEST SENT",
-                "visual": {"kind": "diagram", "query": "phone to API flow"},
+                "visual": {
+                    "kind": "diagram",
+                    "query": "phone to API flow",
+                    "template": "request-flow",
+                    "data": {"nodes": [{"id": "a", "label": "Client", "icon": "smartphone"},{"id": "b", "label": "API", "icon": "server"}], "edges": [{"from": "a", "to": "b", "label": "request"}], "highlightEdge": 0},
+                },
             },
             {
                 "id": "scene-02", "start_ms": 8000, "end_ms": 15000,
                 "narration": "The API is the middleman.", "on_screen_text": "THE MIDDLEMAN",
-                "visual": {"kind": "diagram", "query": "API gateway middleman"},
+                "visual": {
+                    "kind": "diagram",
+                    "query": "API gateway middleman",
+                    "template": "architecture-layers",
+                    "data": {"nodes": [{"id": "a", "label": "Client", "icon": "smartphone"},{"id": "b", "label": "Gateway", "icon": "cloud"},{"id": "c", "label": "API", "icon": "server"}], "edges": [{"from": "a", "to": "b", "label": "request"},{"from": "b", "to": "c", "label": "route"}], "highlightEdge": 1},
+                },
             },
             {
                 "id": "scene-03", "start_ms": 15000, "end_ms": 22000,
                 "narration": "The server processes it.", "on_screen_text": "SERVER RESPONDS",
-                "visual": {"kind": "diagram", "query": "server processing request"},
+                "visual": {
+                    "kind": "diagram",
+                    "query": "server processing request",
+                    "template": "sequence",
+                    "data": {"nodes": [{"id": "a", "label": "Client", "icon": "smartphone"},{"id": "b", "label": "Server", "icon": "server"}], "edges": [{"from": "a", "to": "b", "label": "request"},{"from": "b", "to": "a", "label": "response"}], "highlightEdge": 1},
+                },
             },
             {
                 "id": "scene-04", "start_ms": 22000, "end_ms": 30000,
                 "narration": "You get a response instantly.", "on_screen_text": "DATA RETURNED",
-                "visual": {"kind": "diagram", "query": "response data returned to phone"},
+                "visual": {
+                    "kind": "diagram",
+                    "query": "response data returned to phone",
+                    "template": "timeline",
+                    "data": {"nodes": [{"id": "a", "label": "Request", "icon": "message"},{"id": "b", "label": "Process", "icon": "activity"},{"id": "c", "label": "Response", "icon": "message"}], "edges": [{"from": "a", "to": "b", "label": "latency"},{"from": "b", "to": "c", "label": "return"}], "highlightEdge": 1},
+                },
             },
         ],
     })

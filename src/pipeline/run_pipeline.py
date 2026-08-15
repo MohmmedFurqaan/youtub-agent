@@ -130,14 +130,7 @@ class RunPipeline:
             # Stage 9: write run.json regardless of success/failure
             _write_json(self.run_dir / "run.json", run_json)
 
-            # Stage 10: clean public/ copy
-            try:
-                public_run_dir = _RENDERER_DIR / "public" / "runs" / self.run_id
-                if public_run_dir.exists():
-                    shutil.rmtree(public_run_dir)
-                    logger.info("[pipeline] Cleaned public/ assets")
-            except Exception as clean_exc:
-                logger.warning("[pipeline] Cleanup warning: %s", clean_exc)
+           
 
         return self.run_dir / "final.mp4"
 
@@ -200,13 +193,57 @@ class RunPipeline:
                 "assetKind": asset_kind,
                 "onScreenText": scene.on_screen_text,
                 "transition": scene.transition,
+                "background": scene.visual.background,
             })
             # If this is a Remotion-native diagram, include the typed diagram data
             if scene.visual.kind == "diagram":
                 # Include template and data as-is (validated by VideoPlan)
+                diagram_data = dict(scene.visual.data)
+
+                # Synthesize an animationTimeline when the LLM/plan did not provide one.
+                # This creates conservative, semantic events (enter, cursor, click, move-packet)
+                # that span the scene duration and reference node ids from the diagram.
+                if not diagram_data.get("animationTimeline"):
+                    nodes = diagram_data.get("nodes", [])
+                    edges = diagram_data.get("edges", [])
+                    timeline: list[dict] = []
+
+                    # entrance
+                    timeline.append({"atMs": 0, "durationMs": min(800, max(200, int(duration_ms * 0.08))), "type": "enter"})
+
+                    # If nodes available, add a cursor+click on the first node
+                    if nodes:
+                        first_node = nodes[0]["id"]
+                        cursor_at = timeline[-1]["atMs"] + timeline[-1]["durationMs"] // 2
+                        timeline.append({"atMs": cursor_at, "durationMs": 500, "type": "cursor-move", "target": first_node})
+                        timeline.append({"atMs": cursor_at + 400, "durationMs": 250, "type": "click", "target": first_node})
+
+                    # If edges exist, split remaining time among them to move packets sequentially
+                    remaining_ms = duration_ms - (timeline[-1]["atMs"] + timeline[-1]["durationMs"])
+                    if remaining_ms > 300 and edges:
+                        per_edge = max(300, int(remaining_ms / len(edges)))
+                        start = timeline[-1]["atMs"] + timeline[-1]["durationMs"] + 50
+                        for i, e in enumerate(edges):
+                            at = start + i * per_edge
+                            duration_ev = min(per_edge - 50, max(300, int(per_edge * 0.9)))
+                            ev = {
+                                "atMs": int(at),
+                                "durationMs": int(duration_ev),
+                                "type": "move-packet",
+                                "from": e.get("from"),
+                                "to": e.get("to"),
+                                # optional label based on edge label
+                                "text": e.get("label") or "",
+                            }
+                            timeline.append(ev)
+                            # highlight node on arrival
+                            timeline.append({"atMs": int(at + duration_ev - 120), "durationMs": 220, "type": "highlight-node", "target": e.get("to")})
+
+                    diagram_data["animationTimeline"] = timeline
+
                 scene_props[-1]["diagram"] = {
                     "template": scene.visual.template,
-                    "data": scene.visual.data,
+                    "data": diagram_data,
                 }
             cumulative_frame += duration_frames
 
