@@ -1,46 +1,140 @@
+"""
+src/youtube/video_uploader.py
+
+Upload a completed run's final.mp4 to YouTube.
+
+Authentication uses environment-based OAuth (InstalledAppFlow.from_client_config)
+so no credentials.json file is needed.  Refreshed credentials are stored in
+data/youtube_token.json (outside Git).
+
+Default privacy: private.  Use --publish to make a video public.
+
+After upload, writes data/runs/<run-id>/youtube.json with the video ID and
+upload timestamp.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import google.oauth2.credentials
 
-from src.utility.load_envs import load_all_env
+from src.utility.logging_config import setup_logging
+
+logger = setup_logging()
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
-
-def get_youtube_oauth_config() -> dict:
-    _, _, _, youtube_config = load_all_env()
-    return youtube_config
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_TOKEN_PATH = _PROJECT_ROOT / "data" / "youtube_token.json"
 
 
-def upload_video(video_path: str | Path | None = None, title: str = "Sample AI Generated Reel"):
-    if video_path is None:
-        from src.utility.save_response import SaveLlmResponse
+def _get_credentials(youtube_config: dict):
+    """Return valid OAuth credentials, refreshing from disk cache when possible."""
 
-        video_path = SaveLlmResponse.resolve_video_path()
+    # Try to load saved token
+    if _TOKEN_PATH.exists():
+        try:
+            info = json.loads(_TOKEN_PATH.read_text(encoding="utf-8"))
+            creds = google.oauth2.credentials.Credentials.from_authorized_user_info(
+                info, SCOPES
+            )
+            if creds and creds.valid:
+                logger.info("[uploader] Using cached OAuth token from %s", _TOKEN_PATH)
+                return creds
+        except Exception as exc:
+            logger.warning("[uploader] Could not load cached token: %s", exc)
 
-    video_file = Path(video_path)
+    # Run OAuth flow (opens browser)
+    logger.info("[uploader] Starting OAuth flow …")
+    flow = InstalledAppFlow.from_client_config(youtube_config, SCOPES)
+    creds = flow.run_local_server(port=0)
+
+    # Persist token for future runs
+    _TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+    logger.info("[uploader] OAuth token saved → %s", _TOKEN_PATH)
+
+    return creds
+
+
+def upload_video(
+    run_id: str,
+    run_dir: Path,
+    youtube_config: dict,
+    privacy_status: str = "private",
+) -> dict:
+    """Upload a run's final.mp4 to YouTube.
+
+    Reads metadata from plan.json in the run directory.
+    Writes youtube.json with the returned video ID and upload timestamp.
+
+    Args:
+        run_id:         The run UUID.
+        run_dir:        Path to data/runs/<run-id>/.
+        youtube_config: OAuth client config dict (from load_all_env).
+        privacy_status: "private" (default) or "public".
+
+    Returns:
+        The YouTube API response dict.
+
+    Raises:
+        FileNotFoundError: If final.mp4 or plan.json is missing.
+        ValueError: If privacy_status is not valid.
+    """
+    if privacy_status not in ("private", "public", "unlisted"):
+        raise ValueError(
+            f"privacy_status must be 'private', 'public', or 'unlisted'; got {privacy_status!r}"
+        )
+
+    video_file = run_dir / "final.mp4"
+    plan_file = run_dir / "plan.json"
+
     if not video_file.exists():
-        raise FileNotFoundError(f"Video file not found: {video_file}")
+        raise FileNotFoundError(f"final.mp4 not found: {video_file}")
+    if not plan_file.exists():
+        raise FileNotFoundError(f"plan.json not found: {plan_file}")
 
-    print(f"Video found: {video_file.resolve()}")
-    print("\nStarting Google OAuth...")
+    # Read metadata from plan.json
+    plan_data = json.loads(plan_file.read_text(encoding="utf-8"))
+    yt = plan_data.get("youtube", {})
+    title = yt.get("title", "AI Generated Short")
+    description = yt.get("description", "")
+    tags = yt.get("tags", [])
+    category_id = yt.get("category_id", "22")
 
-    flow = InstalledAppFlow.from_client_config(get_youtube_oauth_config(), SCOPES)
-    credentials = flow.run_local_server(port=0)
+    # Append scene narrations to description
+    narrations = [
+        scene.get("narration", "")
+        for scene in plan_data.get("scenes", [])
+        if scene.get("narration")
+    ]
+    if narrations:
+        description += "\n\n" + " ".join(narrations)
+    description += "\n\n#AI #Shorts #Automation"
 
-    youtube = build("youtube", "v3", credentials=credentials)
+    print(f"\nUploading run: {run_id}")
+    print(f"Title:   {title}")
+    print(f"Privacy: {privacy_status.upper()}")
+    print("\nStarting Google OAuth…")
+
+    creds = _get_credentials(youtube_config)
+    youtube = build("youtube", "v3", credentials=creds)
 
     request_body = {
         "snippet": {
             "title": title,
-            "description": "Uploaded automatically using the YouTube Data API.",
-            "tags": ["AI", "YouTube Agent", "Automation", "Test"],
-            "categoryId": "22",
+            "description": description,
+            "tags": tags,
+            "categoryId": category_id,
         },
         "status": {
-            "privacyStatus": "public",
+            "privacyStatus": privacy_status,
             "selfDeclaredMadeForKids": False,
         },
     }
@@ -52,9 +146,7 @@ def upload_video(video_path: str | Path | None = None, title: str = "Sample AI G
         resumable=True,
     )
 
-    print("\nUploading video...")
-    print("Please wait...\n")
-
+    print("\nUploading…")
     request = youtube.videos().insert(
         part="snippet,status",
         body=request_body,
@@ -65,18 +157,28 @@ def upload_video(video_path: str | Path | None = None, title: str = "Sample AI G
     while response is None:
         status, response = request.next_chunk()
         if status:
-            print(f"Upload progress: {int(status.progress() * 100)}%")
+            print(f"  {int(status.progress() * 100)}%")
 
     video_id = response["id"]
-    print("\n====================================")
-    print("       UPLOAD SUCCESSFUL!")
-    print("====================================")
-    print("\nVideo ID:")
-    print(video_id)
-    print("\nYouTube URL:")
-    print(f"https://www.youtube.com/watch?v={video_id}")
-    print("\nPrivacy:")
-    print("PUBLIC")
-    print("\n====================================")
-    return response
 
+    # Save youtube.json
+    youtube_json = {
+        "video_id": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "privacy": privacy_status,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id,
+    }
+    youtube_path = run_dir / "youtube.json"
+    youtube_path.write_text(json.dumps(youtube_json, indent=2), encoding="utf-8")
+
+    print("\n" + "=" * 50)
+    print("  UPLOAD SUCCESSFUL")
+    print("=" * 50)
+    print(f"  Video ID: {video_id}")
+    print(f"  URL:      https://www.youtube.com/watch?v={video_id}")
+    print(f"  Privacy:  {privacy_status.upper()}")
+    print(f"  Saved:    {youtube_path}")
+    print("=" * 50)
+
+    return response

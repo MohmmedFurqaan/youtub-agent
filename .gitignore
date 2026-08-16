@@ -17,11 +17,26 @@ model/utility/*.ipynb_checkpoints
 
 /model/__pycache__/
 /model/service/__pycache__/
-/data/llm_response.json
-/data/
+
+data/
 /logs/
 /tests/
 .vscode
 video-renderer/out
 video-renderer/node_modules
 .vscode/mcp.json
+youtube-cost-break-down.ods
+.~lock.youtube-cost-break-down.ods#
+
+# YouTube OAuth credentials
+credentials.json
+token.json
+/video-renderer/node_modules/
+/video-renderer/.agents/skills/
+/video-renderer/.claude/skills/
+/video-renderer/skills-lock.json
+/.pytest_cache/
+/video-renderer/public/runs/
+/video-renderer/verif_frames_fb1/
+/video-renderer/verif_frames_fb1_timeline/
+/video-renderer/verif_frames_fb1_timeline_v2/
