@@ -15,6 +15,42 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# create the story literals
+StoryRole = Literal[
+    "hook",
+    "problem",
+    "explanation",
+    "mechanism",
+    "key insight"
+]
+
+class SceneEvent(BaseModel):
+    type: Literal[
+        "flow",
+        "response",
+        "reveal",
+        "comparison",
+        "sequence",
+        "metric",
+    ]
+
+    action: str
+
+    from_: str | None = Field(default=None, alias="from")
+    to_: str | None = Field(default=None, alias="to")
+
+    label: str | None = None
+    result: str
+
+    left: str | None = None
+    right: str | None = None
+    steps: list[str] | None = None
+    target: str | None = None
+
+    model_config = {
+        "populate_by_name": True,
+        "extra": "forbid",
+    }
 
 # ── Sub-models ────────────────────────────────────────────────────────────────
 
@@ -58,13 +94,18 @@ class Scene(BaseModel):
     transition:   How this scene follows the previous one.
     """
 
+    
+
     id: str = Field(..., pattern=r"^scene-\d{2}$")
+    story_role: StoryRole
     start_ms: int = Field(..., ge=0)
     end_ms: int = Field(..., gt=0)
     narration: str
     on_screen_text: str
     visual: VisualAsset
+    event: SceneEvent
     transition: Literal["cut", "fade", "slide"] = "cut"
+    
 
     @model_validator(mode="after")
     def _end_after_start(self) -> "Scene":
@@ -142,7 +183,7 @@ class YouTubeMetadata(BaseModel):
     title: str = Field(..., min_length=5)
     description: str = Field(..., min_length=10)
     tags: list[str] = Field(..., min_length=3)
-    category_id: str = "22"
+    category_id: str = "28"
 
 
 class VideoPlan(BaseModel):
@@ -178,6 +219,16 @@ class VideoPlan(BaseModel):
             )
         return data
 
+    @model_validator(mode="after")
+    def _validate_events(self) -> "VideoPlan":
+        for scene in self.scenes:
+            if scene.event is None:
+                raise ValueError(
+                    f"{scene.id}: event is required"
+                )
+
+        return self
+
 
 # ── Validation helper ─────────────────────────────────────────────────────────
 
@@ -191,9 +242,9 @@ def validate_video_plan(plan: VideoPlan) -> None:
     scenes = plan.scenes
 
     # 1. Scene count
-    if not (4 <= len(scenes) <= 5):
+    if len(scenes) != 5:
         raise ValueError(
-            f"VideoPlan must have 4–5 scenes; got {len(scenes)}"
+            f"VideoPlan must have exactly 5 scenes; got {len(scenes)}"
         )
 
     # 2. First scene starts at 0

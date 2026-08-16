@@ -195,51 +195,20 @@ class RunPipeline:
                 "transition": scene.transition,
                 "background": scene.visual.background,
             })
-            # If this is a Remotion-native diagram, include the typed diagram data
             if scene.visual.kind == "diagram":
-                # Include template and data as-is (validated by VideoPlan)
-                diagram_data = dict(scene.visual.data)
+                diagram_data = dict(scene.visual.data or {})
 
-                # Synthesize an animationTimeline when the LLM/plan did not provide one.
-                # This creates conservative, semantic events (enter, cursor, click, move-packet)
-                # that span the scene duration and reference node ids from the diagram.
-                if not diagram_data.get("animationTimeline"):
-                    nodes = diagram_data.get("nodes", [])
-                    edges = diagram_data.get("edges", [])
-                    timeline: list[dict] = []
+                animation_timeline = self._resolve_animation_timeline(
+                    scene,
+                    duration_ms,
+                )
 
-                    # entrance
-                    timeline.append({"atMs": 0, "durationMs": min(800, max(200, int(duration_ms * 0.08))), "type": "enter"})
+                diagram_data["animationTimeline"] = animation_timeline
 
-                    # If nodes available, add a cursor+click on the first node
-                    if nodes:
-                        first_node = nodes[0]["id"]
-                        cursor_at = timeline[-1]["atMs"] + timeline[-1]["durationMs"] // 2
-                        timeline.append({"atMs": cursor_at, "durationMs": 500, "type": "cursor-move", "target": first_node})
-                        timeline.append({"atMs": cursor_at + 400, "durationMs": 250, "type": "click", "target": first_node})
-
-                    # If edges exist, split remaining time among them to move packets sequentially
-                    remaining_ms = duration_ms - (timeline[-1]["atMs"] + timeline[-1]["durationMs"])
-                    if remaining_ms > 300 and edges:
-                        per_edge = max(300, int(remaining_ms / len(edges)))
-                        start = timeline[-1]["atMs"] + timeline[-1]["durationMs"] + 50
-                        for i, e in enumerate(edges):
-                            at = start + i * per_edge
-                            duration_ev = min(per_edge - 50, max(300, int(per_edge * 0.9)))
-                            ev = {
-                                "atMs": int(at),
-                                "durationMs": int(duration_ev),
-                                "type": "move-packet",
-                                "from": e.get("from"),
-                                "to": e.get("to"),
-                                # optional label based on edge label
-                                "text": e.get("label") or "",
-                            }
-                            timeline.append(ev)
-                            # highlight node on arrival
-                            timeline.append({"atMs": int(at + duration_ev - 120), "durationMs": 220, "type": "highlight-node", "target": e.get("to")})
-
-                    diagram_data["animationTimeline"] = timeline
+                scene_props[-1]["event"] = scene.event.model_dump(
+                    by_alias=True,
+                    exclude_none=True,
+                )
 
                 scene_props[-1]["diagram"] = {
                     "template": scene.visual.template,
@@ -262,6 +231,162 @@ class RunPipeline:
         logger.info("[pipeline] props.json written → %s", props_path)
         return props_path
 
+    def _resolve_animation_timeline(
+        self,
+        scene,
+        duration_ms: int,
+    ) -> list[dict]:
+        """
+        Convert the semantic SceneEvent into renderer-friendly
+        animation timeline events.
+
+        The LLM describes WHAT happens.
+        This resolver decides the deterministic timeline.
+        """
+
+        event = scene.event
+        event_type = event.type
+
+        timeline: list[dict] = []
+
+        
+
+        timeline.append({
+            "atMs": 0,
+            "durationMs": min(500, duration_ms // 8),
+            "type": "enter",
+        })
+
+
+        if event_type == "flow":
+            if not event.from_ or not event.to_:
+                raise ValueError(
+                    f"{scene.id}: flow event requires from and to"
+                )
+
+            start_ms = min(700, duration_ms // 5)
+            available = max(800, duration_ms - start_ms - 400)
+
+            timeline.append({
+                "atMs": start_ms,
+                "durationMs": available,
+                "type": "move-packet",
+                "from": event.from_,
+                "to": event.to_,
+                "text": event.label or "",
+            })
+
+            timeline.append({
+                "atMs": start_ms + available - 100,
+                "durationMs": 300,
+                "type": "highlight-node",
+                "target": event.to_,
+            })
+
+        
+
+        elif event_type == "response":
+            if not event.from_ or not event.to_:
+                raise ValueError(
+                    f"{scene.id}: response event requires from and to"
+                )
+
+            start_ms = min(700, duration_ms // 5)
+            available = max(800, duration_ms - start_ms - 400)
+
+            timeline.append({
+                "atMs": start_ms,
+                "durationMs": available,
+                "type": "move-packet",
+                "from": event.from_,
+                "to": event.to_,
+                "text": event.label or "response",
+            })
+
+            timeline.append({
+                "atMs": start_ms + available - 100,
+                "durationMs": 300,
+                "type": "highlight-node",
+                "target": event.to_,
+            })
+
+
+
+        elif event_type == "reveal":
+            if not event.target:
+                raise ValueError(
+                    f"{scene.id}: reveal event requires target"
+                )
+
+            start_ms = min(700, duration_ms // 4)
+
+            timeline.append({
+                "atMs": start_ms,
+                "durationMs": min(700, duration_ms // 4),
+                "type": "reveal-node",
+                "target": event.target,
+                "text": event.label or "",
+            })
+
+            timeline.append({
+                "atMs": start_ms + 700,
+                "durationMs": 300,
+                "type": "highlight-node",
+                "target": event.target,
+            })
+
+        
+
+        elif event_type == "comparison":
+            timeline.append({
+                "atMs": min(600, duration_ms // 6),
+                "durationMs": min(700, duration_ms // 5),
+                "type": "comparison-reveal",
+                "left": event.left or "",
+                "right": event.right or "",
+            })
+
+
+
+        elif event_type == "sequence":
+            steps = event.steps or []
+
+            if not steps:
+                raise ValueError(
+                    f"{scene.id}: sequence event requires steps"
+                )
+
+            start_ms = min(600, duration_ms // 6)
+            available = max(1000, duration_ms - start_ms - 300)
+            per_step = max(300, available // len(steps))
+
+            for index, step in enumerate(steps):
+                timeline.append({
+                    "atMs": start_ms + index * per_step,
+                    "durationMs": min(per_step - 50, 700),
+                    "type": "sequence-step",
+                    "index": index,
+                    "text": step,
+                })
+
+
+
+        elif event_type == "metric":
+            timeline.append({
+                "atMs": min(500, duration_ms // 6),
+                "durationMs": min(1800, duration_ms // 2),
+                "type": "metric-change",
+                "label": event.label or "",
+                "result": event.result,
+            })
+
+        else:
+            raise ValueError(
+                f"{scene.id}: unsupported event type {event_type}"
+            )
+
+        return timeline
+    
     def _copy_assets_to_public(
         self,
         mp3_path: Path,
