@@ -1,13 +1,14 @@
 /**
  * components/SceneRenderer.tsx
  *
- * Renders a single scene inside a <Sequence>:
- *   - SVG diagram OR still image OR video background
- *   - Ken Burns slow zoom for still assets
- *   - On-screen text overlay
+ * Renders a single scene with:
+ *  - ParticleBackground  (animated grid/dots — replaces flat gradients)
+ *  - ReactFlowDiagram    (node-edge diagrams with DiceBear avatars)
+ *  - CartoonCharacter    (DiceBear avatar with idle bounce)
+ *  - KineticTextOverlay  (large Google Fonts headline)
+ *  - Transition overlays (cut | fade | slide | zoom-punch | glitch)
  *
- * All animation uses useCurrentFrame() + interpolate() / spring() — no CSS
- * transitions (which are non-deterministic in Remotion's renderer).
+ * Captions are removed for this phase.
  */
 
 import React from "react";
@@ -15,233 +16,39 @@ import {
   useCurrentFrame,
   useVideoConfig,
   interpolate,
-  spring,
   Img,
-  Video,
-  Sequence,
   OffthreadVideo,
   staticFile,
   Easing,
+  AbsoluteFill,
 } from "remotion";
 import type { SceneProp } from "../schemas";
+import { ParticleBackground } from "./ParticleBackground";
+import { CartoonCharacter } from "./CartoonCharacter";
+import { KineticTextOverlay } from "./KineticTextOverlay";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
-import { SAFE_AREAS } from "./SafeAreas";
 
 interface Props {
   scene: SceneProp;
+  storyRole?: string;
 }
 
-// Very soft paper/noise SVG used as a repeating overlay. Kept low-opacity.
-const NOISE_SVG = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><filter id='t'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23t)' fill='white' opacity='1'/></svg>`;
-const NOISE_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(NOISE_SVG)}`;
+// ── Transitions ───────────────────────────────────────────────────────────────
 
-// ── Background ────────────────────────────────────────────────────────────────
-
-const backgroundStyles: Record<string, string> = {
-  // Subtle, low-contrast gradients for a professional technical look
-  "midnight-blue": "linear-gradient(180deg, #061026 0%, #0b1624 100%)",
-  "deep-purple": "linear-gradient(180deg, #100a17 0%, #171426 100%)",
-  "teal": "linear-gradient(180deg, #052025 0%, #0b2430 100%)",
-  "amber": "linear-gradient(180deg, #140f09 0%, #20160f 100%)",
-  "slate": "linear-gradient(180deg, #09101a 0%, #121827 100%)",
-  "graphite": "linear-gradient(180deg, #0b0b0d 0%, #14171b 100%)",
-};
-
-const DiagramBackground: React.FC<{ assetSrc: string; diagram?: any; background?: string; sceneStartMs?: number; sceneDurationMs?: number }> = ({ assetSrc, diagram, background, sceneStartMs, sceneDurationMs }) => {
+const FadeIn: React.FC = () => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-
-  const scale = interpolate(frame, [0, durationInFrames], [1.0, 1.02], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-  const driftX = interpolate(frame, [0, durationInFrames], [-4, 4], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-  const driftY = interpolate(frame, [0, durationInFrames], [-3, 3], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-
-  const resolvedBackground = backgroundStyles[background ?? "midnight-blue"] ?? backgroundStyles["midnight-blue"];
-
-  if (diagram) {
-    return (
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          background: resolvedBackground,
-        }}
-      >
-        <div
-          style={{
-            transform: `scale(${scale}) translate(${driftX}px, ${driftY}px)`,
-            width: "100%",
-            height: "100%",
-            filter: "saturate(1.2)",
-          }}
-        >
-          <DiagramRenderer spec={diagram} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />
-        </div>
-      </div>
-    );
-  }
-
+  const opacity = interpolate(frame, [0, 12], [1, 0], { extrapolateRight: "clamp" });
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        background: resolvedBackground,
-      }}
-    >
-      <div
-        style={{
-          transform: `scale(${scale}) translate(${driftX}px, ${driftY}px)`,
-          width: "100%",
-          height: "100%",
-        }}
-      >
-        <Img
-          src={staticFile(assetSrc)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      </div>
-    </div>
+    <div style={{ position: "absolute", inset: 0, background: "#000", opacity, pointerEvents: "none" }} />
   );
 };
 
-const StillBackground: React.FC<{ assetSrc: string }> = ({ assetSrc }) => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-
-  const scale = interpolate(frame, [0, durationInFrames], [1.0, 1.04], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-
-  return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-      <div style={{ transform: `scale(${scale})`, width: "100%", height: "100%" }}>
-        <Img
-          src={staticFile(assetSrc)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      </div>
-    </div>
-  );
-};
-
-const VideoBackground: React.FC<{ assetSrc: string }> = ({ assetSrc }) => (
-  <div style={{ position: "absolute", inset: 0 }}>
-    <OffthreadVideo
-      src={staticFile(assetSrc)}
-      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-    />
-  </div>
-);
-
-// ── On-screen text ────────────────────────────────────────────────────────────
-
-const OnScreenText: React.FC<{ text: string }> = ({ text }) => {
-  const frame = useCurrentFrame();
-
-  const opacity = interpolate(frame, [0, 10], [0, 1], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-  const translateY = interpolate(frame, [0, 10], [22, 0], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-  const scale = interpolate(frame, [0, 12], [0.985, 1], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-    output: "perceptual-scale",
-  });
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: SAFE_AREAS.title.top,
-        display: "flex",
-        justifyContent: "center",
-        padding: "0 72px",
-        opacity,
-        transform: `translateY(${translateY}px) scale(${scale})`,
-      }}
-    >
-      <div
-        style={{
-          background: "linear-gradient(180deg, rgba(15, 23, 42, 0.58), rgba(15, 118, 110, 0.18))",
-          backdropFilter: "blur(12px)",
-          border: "1.5px solid rgba(148, 163, 184, 0.34)",
-          borderRadius: 20,
-          padding: "18px 30px",
-          boxShadow: "0 18px 40px rgba(2, 6, 23, 0.32)",
-          maxWidth: "820px",
-          width: "100%",
-          textAlign: "center",
-        }}
-      >
-        <span
-          style={{
-            display: "block",
-            fontFamily: "'Arial Black', 'Arial', sans-serif",
-            fontSize: 68,
-            lineHeight: 1.06,
-            letterSpacing: 2,
-            fontWeight: 900,
-            color: "#f8fafc",
-            textTransform: "uppercase",
-            textShadow: "0 0 18px rgba(125,211,252,0.6)",
-          }}
-        >
-          {text}
-        </span>
-      </div>
-    </div>
-  );
-};
-
-// ── Transition overlay ────────────────────────────────────────────────────────
-
-const FadeTransitionIn: React.FC = () => {
-  const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 10], [1, 0], {
-    extrapolateRight: "clamp",
-  });
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        background: "#000",
-        opacity,
-        pointerEvents: "none",
-      }}
-    />
-  );
-};
-
-const SlideTransitionIn: React.FC = () => {
+const SlideIn: React.FC = () => {
   const frame = useCurrentFrame();
   const { width } = useVideoConfig();
-  const x = interpolate(frame, [0, 15], [width, 0], {
+  const x = interpolate(frame, [0, 18], [width, 0], {
     extrapolateRight: "clamp",
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
   return (
     <div
@@ -256,56 +63,170 @@ const SlideTransitionIn: React.FC = () => {
   );
 };
 
-// ── Scene component ───────────────────────────────────────────────────────────
+const ZoomPunchIn: React.FC = () => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, 14], [1.35, 1], {
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+  });
+  const opacity = interpolate(frame, [0, 6], [0, 1], { extrapolateRight: "clamp" });
+  return (
+    <AbsoluteFill
+      style={{
+        transform: `scale(${scale})`,
+        opacity,
+        transformOrigin: "center center",
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
 
-export const SceneRenderer: React.FC<Props> = ({ scene }) => {
+const GlitchIn: React.FC = () => {
+  const frame = useCurrentFrame();
+  if (frame > 10) return null;
+
+  const glitchFrame = frame % 3;
+  const opacity = interpolate(frame, [0, 10], [1, 0], { extrapolateRight: "clamp" });
+
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", opacity }}>
+      {/* Horizontal glitch bands */}
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            height: 80 + i * 40,
+            top: 300 + i * 220 + (glitchFrame === i ? 20 : -10),
+            background: i % 2 === 0 ? "rgba(239,68,68,0.35)" : "rgba(96,165,250,0.35)",
+            mixBlendMode: "exclusion",
+          }}
+        />
+      ))}
+      {/* Scanline */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 4px)",
+        }}
+      />
+    </div>
+  );
+};
+
+// ── Still / Video backgrounds for non-diagram scenes ─────────────────────────
+
+const StillBackground: React.FC<{ assetSrc: string }> = ({ assetSrc }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const scale = interpolate(frame, [0, durationInFrames], [1.0, 1.05], {
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+  });
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      <div style={{ transform: `scale(${scale})`, width: "100%", height: "100%" }}>
+        <Img src={staticFile(assetSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    </div>
+  );
+};
+
+const VideoBackground: React.FC<{ assetSrc: string }> = ({ assetSrc }) => (
+  <div style={{ position: "absolute", inset: 0 }}>
+    <OffthreadVideo src={staticFile(assetSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+  </div>
+);
+
+// ── Vignette overlay ──────────────────────────────────────────────────────────
+
+const Vignette: React.FC = () => (
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      background: "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.65) 100%)",
+      pointerEvents: "none",
+    }}
+  />
+);
+
+// ── Scene ─────────────────────────────────────────────────────────────────────
+
+export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
   const { fps } = useVideoConfig();
   const sceneStartMs = (scene.fromFrame / fps) * 1000;
   const sceneDurationMs = (scene.durationInFrames / fps) * 1000;
+
+  // Infer role from scene id if not passed (scene-01 = hook, etc.)
+  const roleFromId = (() => {
+    if (scene.id.includes("01")) return "hook";
+    if (scene.id.includes("02")) return "problem";
+    if (scene.id.includes("03")) return "explanation";
+    if (scene.id.includes("04")) return "mechanism";
+    if (scene.id.includes("05")) return "insight";
+    return "explanation";
+  })();
+  const role = storyRole ?? roleFromId;
+
+  // Character position — alternate sides per scene
+  const charPosition = ["01", "03", "05"].some((s) => scene.id.includes(s))
+    ? "bottom-right"
+    : "bottom-left";
+
+  // Background
   const renderBackground = () => {
     if (scene.assetKind === "diagram" || scene.assetKind === "screen_capture") {
-      return <DiagramBackground assetSrc={scene.assetSrc} diagram={(scene as any).diagram} background={scene.background} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <ParticleBackground background={scene.background} />;
     }
     if (scene.assetKind === "image") {
       return <StillBackground assetSrc={scene.assetSrc} />;
     }
-    // stock_video
     return <VideoBackground assetSrc={scene.assetSrc} />;
   };
 
+  // Diagram layer
+  const renderDiagram = () => {
+    const diag = (scene as any).diagram;
+    if (!diag) return null;
+    return (
+      <div style={{ position: "absolute", inset: 0 }}>
+        <DiagramRenderer
+          spec={diag}
+          sceneStartMs={sceneStartMs}
+          sceneDurationMs={sceneDurationMs}
+        />
+      </div>
+    );
+  };
+
+  // Transition
   const renderTransition = () => {
-    if (scene.transition === "fade") return <FadeTransitionIn />;
-    if (scene.transition === "slide") return <SlideTransitionIn />;
-    return null; // cut — no overlay
+    switch (scene.transition) {
+      case "fade":  return <FadeIn />;
+      case "slide": return <SlideIn />;
+      case "zoom-punch" as any: return <ZoomPunchIn />;
+      case "glitch" as any: return <GlitchIn />;
+      default: return null;
+    }
   };
 
   return (
     <>
       {renderBackground()}
-      {/* Vignette for depth */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%)",
-          pointerEvents: "none",
-        }}
+      <Vignette />
+      {renderDiagram()}
+      <CartoonCharacter
+        seed={scene.id}
+        storyRole={role}
+        position={charPosition as any}
+        size={280}
       />
-      {/* Very soft paper/noise overlay (repeating SVG) */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `url(${NOISE_DATA_URL})`,
-          backgroundRepeat: "repeat",
-          backgroundSize: "400px 400px",
-          opacity: 0.035,
-          mixBlendMode: "overlay",
-          pointerEvents: "none",
-        }}
-      />
-      <OnScreenText text={scene.onScreenText} />
+      <KineticTextOverlay text={scene.onScreenText} storyRole={role} />
       {renderTransition()}
     </>
   );

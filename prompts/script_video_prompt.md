@@ -123,7 +123,7 @@ Rules:
 
 Recommended structure:
 
-* Scene 1: 0–5,000 ms — Hook [mark it in story_label with hook] 
+* Scene 1: 0–5,000 ms — fsHook [mark it in story_label with hook] 
 * Scene 2: 5,000–10,000 ms — Problem [mark it in story_label with problem] 
 * Scene 3: 10,000–16,000 ms — Explanation [mark it in story_label with explanation] 
 * Scene 4: 16,000–24,000 ms — Mechanism / Example [mark it in story_label with mechanism] 
@@ -145,20 +145,31 @@ Every video must follow one coherent story.
 
 Immediately create curiosity or communicate a useful problem.
 
-The viewer should understand why the topic matters.
+The hook MUST use one of these proven viral patterns:
 
-Examples:
+**Numbered:** Start with a specific number.
+- "99% of developers get this wrong."
+- "3 lines of code that broke production."
+- "This one bug cost $10 million."
 
-* "Your API can fail for this reason."
-* "This is why your database becomes slow."
-* "Ever wondered what happens after you click Login?"
+**Controversy/Surprise:** Challenge an assumption.
+- "REST APIs are dead. Here's what's replacing them."
+- "The database everyone recommends is wrong for most apps."
 
-Do not begin with:
+**Fear/Consequence:**
+- "Your API is leaking data right now."
+- "This mistake will get you fired."
 
-* "Today we will learn..."
-* "In this video..."
-* "Let's talk about..."
-* "Have you ever wondered..." unless it is genuinely strong.
+**Curiosity gap (incomplete information):**
+- "A single HTTP header can make your app 10x faster."
+- "There's a hidden layer every request passes through."
+
+The first sentence of Scene 1 narration MUST:
+- Be 10 words or fewer.
+- Contain a number, a strong action verb, or a shocking claim.
+- NOT start with "Today", "In this video", "Let's", or "Have you".
+
+The viewer should understand why the topic matters within 3 seconds.
 
 ---
 
@@ -436,6 +447,46 @@ It describes the semantic action that Remotion will interpret.
 
 Supported event types:
 
+For `flow` and `response`:
+
+- `from` MUST exactly match one `visual.data.nodes[].id`.
+- `to` MUST exactly match one `visual.data.nodes[].id`.
+
+For `reveal`:
+
+- `target` MUST exactly match one `visual.data.nodes[].id`.
+
+Never create an event that references a node ID that does not exist in the scene.
+
+Before returning the final JSON, validate every event reference against the scene's node IDs.
+
+Example of INVALID data:
+
+"event": {
+  "type": "reveal",
+  "target": "encryption"
+}
+
+when the diagram contains:
+
+"nodes": [
+  {"id": "message"}
+]
+
+Example of VALID data:
+
+"event": {
+  "type": "reveal",
+  "target": "encryption"
+}
+
+when the diagram contains:
+
+"nodes": [
+  {"id": "message"},
+  {"id": "encryption"}
+]
+
 ### flow
 
 Something moves from one node to another.
@@ -709,6 +760,16 @@ For security, encryption, networking, databases, operating systems, and distribu
 
 For end-to-end encryption specifically, never imply that an intermediary server decrypts message content. The intended sender and recipient(s) are the endpoints that can access plaintext.
 
+If an event needs to reveal, highlight, or animate a concept that is not currently represented by a node, add that concept as a node before creating the event.
+
+For example, if the event targets "encryption", the diagram must contain:
+
+{
+  "id": "encryption",
+  "label": "Encryption",
+  "icon": "lock"
+}
+
 If a concept depends on implementation details, use wording such as "typically", "in many systems", or "depending on the implementation" when appropriate.
 
 ---
@@ -749,8 +810,15 @@ Use:
 * `cut`
 * `fade`
 * `slide`
+* `zoom-punch`
+* `glitch`
 
-Prefer `cut` for technical explanations.
+Recommended usage:
+* `glitch` — between Scene 1 (hook) and Scene 2 (problem) for high-energy impact
+* `zoom-punch` — between Scene 4 and Scene 5 for the big reveal/insight
+* `fade` — between calm explanation scenes
+* `cut` — default for technical transitions
+* `slide` — between problem and explanation
 
 Do not use transitions merely for decoration.
 

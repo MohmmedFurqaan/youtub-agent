@@ -35,7 +35,9 @@ def _make_plan() -> VideoPlan:
         "scenes": [
             {
                 "id": "scene-01", "start_ms": 0, "end_ms": 8000,
+                "story_role": "hook",
                 "narration": "Your phone sends a request.", "on_screen_text": "REQUEST SENT",
+                "event": {"type": "flow", "action": "request", "from": "a", "to": "b", "result": "ok"},
                 "visual": {
                     "kind": "diagram",
                     "query": "phone to API flow",
@@ -45,7 +47,9 @@ def _make_plan() -> VideoPlan:
             },
             {
                 "id": "scene-02", "start_ms": 8000, "end_ms": 15000,
+                "story_role": "explanation",
                 "narration": "The API is the middleman.", "on_screen_text": "THE MIDDLEMAN",
+                "event": {"type": "reveal", "action": "reveal", "target": "b", "result": "ok"},
                 "visual": {
                     "kind": "diagram",
                     "query": "API gateway middleman",
@@ -55,7 +59,9 @@ def _make_plan() -> VideoPlan:
             },
             {
                 "id": "scene-03", "start_ms": 15000, "end_ms": 22000,
+                "story_role": "mechanism",
                 "narration": "The server processes it.", "on_screen_text": "SERVER RESPONDS",
+                "event": {"type": "response", "action": "respond", "from": "b", "to": "a", "result": "ok"},
                 "visual": {
                     "kind": "diagram",
                     "query": "server processing request",
@@ -65,7 +71,9 @@ def _make_plan() -> VideoPlan:
             },
             {
                 "id": "scene-04", "start_ms": 22000, "end_ms": 30000,
+                "story_role": "key insight",
                 "narration": "You get a response instantly.", "on_screen_text": "DATA RETURNED",
+                "event": {"type": "flow", "action": "return", "from": "b", "to": "a", "result": "ok"},
                 "visual": {
                     "kind": "diagram",
                     "query": "response data returned to phone",

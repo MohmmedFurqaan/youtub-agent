@@ -25,7 +25,8 @@ export const scenePropSchema = z.object({
   assetSrc: z.string(),
   assetKind: z.enum(["stock_video", "image", "diagram", "screen_capture"]),
   onScreenText: z.string(),
-  transition: z.enum(["cut", "fade", "slide"]),
+  transition: z.enum(["cut", "fade", "slide", "zoom-punch", "glitch"]),
+  storyRole: z.string().optional(),
   background: z.string().optional(),
   // Optional typed diagram payload for Remotion-native diagrams
   diagram: z
@@ -81,14 +82,16 @@ export const scenePropSchema = z.object({
     .optional(),
 });
 
-// Root props passed to the ShortVideo composition
 export const shortVideoSchema = z.object({
   /** Relative path to narration.mp3 inside video-renderer/public/runs/<run-id>/ */
   audioSrc: z.string(),
   scenes: z.array(scenePropSchema).min(4).max(5),
-  captions: z.array(captionSchema),
+  /** Word-level captions from TTS */
+  captions: z.array(captionSchema).optional().default([]),
   /** Optional: video title shown in Studio preview */
   title: z.string().optional(),
+  /** Optional: background music track relative path */
+  musicSrc: z.string().optional(),
 });
 
 export type ShortVideoProps = z.infer<typeof shortVideoSchema>;

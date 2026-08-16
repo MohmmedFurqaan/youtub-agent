@@ -6,12 +6,17 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@dicebear/core": "^9.4.3",
+    "@dicebear/styles": "^10.4.0",
     "@remotion/captions": "4.0.512",
     "@remotion/cli": "4.0.512",
+    "@remotion/google-fonts": "^4.0.512",
     "@remotion/media-utils": "4.0.512",
     "lucide-react": "^1.31.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-sounds": "^1.0.30",
+    "reactflow": "^11.11.4",
     "remotion": "4.0.512",
     "zod": "4.4.3"
   },

@@ -194,6 +194,7 @@ class RunPipeline:
                 "onScreenText": scene.on_screen_text,
                 "transition": scene.transition,
                 "background": scene.visual.background,
+                "storyRole": getattr(scene, "story_role", None) or scene.id.split("-")[-1],
             })
             if scene.visual.kind == "diagram":
                 diagram_data = dict(scene.visual.data or {})
@@ -224,6 +225,7 @@ class RunPipeline:
             "audioSrc": audio_src,
             "scenes": scene_props,
             "captions": tts_result.captions,
+            "musicSrc": "music/tech_ambient.mp3",
         }
 
         props_path = self.run_dir / "props.json"

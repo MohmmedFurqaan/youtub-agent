@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 # create the story literals
 StoryRole = Literal[
@@ -51,6 +51,16 @@ class SceneEvent(BaseModel):
         "populate_by_name": True,
         "extra": "forbid",
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_event_strings(cls, data: dict) -> dict:
+        if isinstance(data, dict):
+            for key in ("from", "to"):
+                val = data.get(key)
+                if isinstance(val, int):
+                    data[key] = str(val)
+        return data
 
 # ── Sub-models ────────────────────────────────────────────────────────────────
 
@@ -104,7 +114,7 @@ class Scene(BaseModel):
     on_screen_text: str
     visual: VisualAsset
     event: SceneEvent
-    transition: Literal["cut", "fade", "slide"] = "cut"
+    transition: Literal["cut", "fade", "slide", "zoom-punch", "glitch"] = "cut"
     
 
     @model_validator(mode="after")
@@ -124,6 +134,13 @@ class Scene(BaseModel):
                 f"{self.id}: on_screen_text has {words} word(s); expected 2–5"
             )
         return self
+
+    @field_validator("story_role", mode="before")
+    @classmethod
+    def _coerce_story_role(cls, value: str) -> str:
+        if value == "key_insight":
+            return "key insight"
+        return value
 
 
     @model_validator(mode="after")
