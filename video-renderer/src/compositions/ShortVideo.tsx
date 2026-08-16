@@ -5,9 +5,10 @@
  *
  * Structure:
  *   - <Audio> narration.mp3 — full 30 s
- *   - Per-scene <Sequence> → SceneRenderer
- *
- * Captions removed for Phase 1.
+ *   - <Audio> music track — looped ambient background
+ *   - Per-scene <Sequence> → SceneRenderer (visuals)
+ *   - Per-scene <Sequence> → <Audio> transition sound effects
+ *   - Global captions overlay
  */
 
 import React from "react";
@@ -21,6 +22,8 @@ import {
 import type { ShortVideoProps } from "../schemas";
 import { SceneRenderer } from "../components/SceneRenderer";
 import { CaptionsOverlay } from "../components/CaptionsOverlay";
+import { SOUND_LIBRARY, TRANSITION_SOUND, STORY_ROLE_SOUND, EVENT_SOUND } from "../config/SoundConfig";
+import type { SceneProp } from "../schemas";
 
 export const ShortVideo: React.FC<ShortVideoProps> = ({
   audioSrc,
@@ -48,6 +51,62 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
     }
   }, [scenes, fps, durationInFrames]);
 
+  /** Build the list of sound-effect Sequences for the current scene set. */
+  const renderSceneSounds = (sortedScenes: SceneProp[]): React.ReactElement[] => {
+    const elements: React.ReactElement[] = [];
+
+    sortedScenes.forEach((scene) => {
+      const transitionSound = TRANSITION_SOUND[scene.transition] || "ui/toggle_on";
+      const roleSound = STORY_ROLE_SOUND[scene.storyRole || ""] || "ui/item_select";
+      const eventSound = scene.diagram ? EVENT_SOUND[scene.diagram.template] || "ui/item_select" : null;
+
+      // Transition sound — plays at scene start
+      const tSound = SOUND_LIBRARY[transitionSound];
+      elements.push(
+        <Sequence
+          key={`sfx-trans-${scene.id}`}
+          from={scene.fromFrame}
+          durationInFrames={fps} // 1s window is enough for short SFX
+          name={`sfx-transition-${scene.id}`}
+        >
+          <Audio src={tSound.src} volume={tSound.volume} />
+        </Sequence>,
+      );
+
+      // Story-role sound — plays 6 frames after scene start (after transition)
+      const rSound = SOUND_LIBRARY[roleSound];
+      elements.push(
+        <Sequence
+          key={`sfx-role-${scene.id}`}
+          from={scene.fromFrame + 6}
+          durationInFrames={fps}
+          name={`sfx-role-${scene.id}`}
+        >
+          <Audio src={rSound.src} volume={rSound.volume} />
+        </Sequence>,
+      );
+
+      // Diagram event sound — plays 12 frames after scene start
+      if (eventSound) {
+        const eSound = SOUND_LIBRARY[eventSound];
+        elements.push(
+          <Sequence
+            key={`sfx-event-${scene.id}`}
+            from={scene.fromFrame + 12}
+            durationInFrames={fps}
+            name={`sfx-event-${scene.id}`}
+          >
+            <Audio src={eSound.src} volume={eSound.volume} />
+          </Sequence>,
+        );
+      }
+    });
+
+    return elements;
+  };
+
+  const sortedScenes = [...scenes].sort((a, b) => a.fromFrame - b.fromFrame);
+
   return (
     <AbsoluteFill style={{ background: "#030712", width, height }}>
       {/* Background music */}
@@ -58,8 +117,8 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
       {/* Narration audio */}
       <Audio src={staticFile(audioSrc)} />
 
-      {/* Scenes */}
-      {scenes.map((scene) => (
+      {/* Scene visual layers */}
+      {sortedScenes.map((scene) => (
         <Sequence
           key={scene.id}
           from={scene.fromFrame}
@@ -71,6 +130,9 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
           </AbsoluteFill>
         </Sequence>
       ))}
+
+      {/* Animation sound effects (rendered into final MP4) */}
+      {renderSceneSounds(sortedScenes)}
 
       {/* Global captions overlay */}
       {captions.length > 0 && <CaptionsOverlay captions={captions} />}

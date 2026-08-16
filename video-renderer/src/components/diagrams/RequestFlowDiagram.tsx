@@ -1,39 +1,15 @@
 import React from "react";
-import {
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  spring,
-  Easing,
-} from "remotion";
+import { useCurrentFrame, useVideoConfig, interpolate, spring, Easing } from "remotion";
 import iconRegistry from "./iconRegistry";
+import type { BaseDiagramProps } from "./DiagramRenderer";
 
-type NodeData = {
-  id: string;
-  label: string;
-  icon?: string;
-};
-
-type EdgeData = {
-  from: string;
-  to: string;
-  label?: string;
-};
+type NodeData = { id: string; label: string; icon?: string };
+type EdgeData = { from: string; to: string; label?: string };
 
 type AnimationEvent = {
   atMs: number;
   durationMs: number;
-  type:
-    | "enter"
-    | "exit"
-    | "highlight-node"
-    | "highlight-edge"
-    | "move-packet"
-    | "cursor-move"
-    | "click"
-    | "type"
-    | "show-data"
-    | "pulse";
+  type: string;
   target?: string;
   from?: string;
   to?: string;
@@ -344,23 +320,20 @@ const Cursor: React.FC<CursorProps> = ({
   );
 };
 
-const RequestFlowDiagram: React.FC<{
-  data: DiagramData;
-  sceneStartMs?: number;
-  sceneDurationMs?: number;
-}> = ({
+const RequestFlowDiagram: React.FC<BaseDiagramProps> = ({
   data,
+  event: _event,
   sceneStartMs = 0,
-  sceneDurationMs,
+  sceneDurationMs: _sceneDurationMs,
 }) => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const currentMs = (frame / fps) * 1000;
-
-  const nodes = data?.nodes ?? [];
-  const edges = data?.edges ?? [];
-  const timeline = data?.animationTimeline ?? [];
+  const typedData: DiagramData = data;
+  const nodes: NodeData[] = typedData?.nodes ?? [];
+  const edges: EdgeData[] = typedData?.edges ?? [];
+  const timeline: AnimationEvent[] = typedData?.animationTimeline ?? [];
 
   /*
    * Position nodes horizontally.

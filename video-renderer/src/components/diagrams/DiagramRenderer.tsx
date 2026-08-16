@@ -10,24 +10,34 @@ import MetricChartDiagram from "./MetricChartDiagram";
 export interface DiagramSpec {
   template: string;
   data: any;
+  event?: any;
+}
+
+export interface BaseDiagramProps {
+  data: any;
+  event?: any;
+  sceneStartMs?: number;
+  sceneDurationMs?: number;
 }
 
 const DiagramRenderer: React.FC<{ spec: DiagramSpec; sceneStartMs?: number; sceneDurationMs?: number }> = ({ spec, sceneStartMs, sceneDurationMs }) => {
-  switch (spec.template) {
+  const { data, event, template } = spec;
+  const commonProps = { data, event, sceneStartMs, sceneDurationMs };
+  switch (template) {
     case "request-flow":
-      return <RequestFlowDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <RequestFlowDiagram {...commonProps} />;
     case "architecture-layers":
-      return <ArchitectureLayersDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <ArchitectureLayersDiagram {...commonProps} />;
     case "sequence":
-      return <SequenceDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <SequenceDiagram {...commonProps} />;
     case "comparison":
-      return <ComparisonDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <ComparisonDiagram {...commonProps} />;
     case "timeline":
-      return <TimelineDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <TimelineDiagram {...commonProps} />;
     case "concept-card":
-      return <ConceptCardDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <ConceptCardDiagram {...commonProps} />;
     case "metric-chart":
-      return <MetricChartDiagram data={spec.data} sceneStartMs={sceneStartMs} sceneDurationMs={sceneDurationMs} />;
+      return <MetricChartDiagram {...commonProps} />;
     default:
       return <div />;
   }

@@ -27,6 +27,8 @@ import { ParticleBackground } from "./ParticleBackground";
 import { CartoonCharacter } from "./CartoonCharacter";
 import { KineticTextOverlay } from "./KineticTextOverlay";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
+import { useSoundOnChange } from "react-sounds";
+import { SOUND_LIBRARY, TRANSITION_SOUND } from "../config/SoundConfig";
 
 interface Props {
   scene: SceneProp;
@@ -159,8 +161,21 @@ const Vignette: React.FC = () => (
 
 export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
   const { fps } = useVideoConfig();
+  const frame = useCurrentFrame();
   const sceneStartMs = (scene.fromFrame / fps) * 1000;
   const sceneDurationMs = (scene.durationInFrames / fps) * 1000;
+
+  // Interactive sound triggers (Studio / Player preview via react-sounds).
+  // The <Audio> components in ShortVideo.tsx handle the rendered output.
+  const transitionSoundName = TRANSITION_SOUND[scene.transition] || "ui/toggle_on";
+  const transitionSound = SOUND_LIBRARY[transitionSoundName];
+
+  // Trigger transition sound at scene start (frame 0 of sequence)
+  useSoundOnChange(
+    transitionSoundName,
+    frame === 0,
+    { volume: transitionSound.volume },
+  );
 
   // Infer role from scene id if not passed (scene-01 = hook, etc.)
   const roleFromId = (() => {
@@ -178,15 +193,19 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
     ? "bottom-right"
     : "bottom-left";
 
-  // Background
+  // Background — always include ParticleBackground as base layer so
+  // scenes with missing/unresolved assets still render a visible background
   const renderBackground = () => {
     if (scene.assetKind === "diagram" || scene.assetKind === "screen_capture") {
       return <ParticleBackground background={scene.background} />;
     }
-    if (scene.assetKind === "image") {
-      return <StillBackground assetSrc={scene.assetSrc} />;
-    }
-    return <VideoBackground assetSrc={scene.assetSrc} />;
+    return (
+      <>
+        <ParticleBackground background={scene.background} />
+        {scene.assetKind === "image" && <StillBackground assetSrc={scene.assetSrc} />}
+        {scene.assetKind === "stock_video" && <VideoBackground assetSrc={scene.assetSrc} />}
+      </>
+    );
   };
 
   // Diagram layer
@@ -196,7 +215,7 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
     return (
       <div style={{ position: "absolute", inset: 0 }}>
         <DiagramRenderer
-          spec={diag}
+          spec={{ ...diag, event: (scene as any).event }}
           sceneStartMs={sceneStartMs}
           sceneDurationMs={sceneDurationMs}
         />

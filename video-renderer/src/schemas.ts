@@ -28,6 +28,21 @@ export const scenePropSchema = z.object({
   transition: z.enum(["cut", "fade", "slide", "zoom-punch", "glitch"]),
   storyRole: z.string().optional(),
   background: z.string().optional(),
+  // Optional event data for diagram animation context
+  event: z
+    .object({
+      type: z.string(),
+      action: z.string(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      label: z.string().optional(),
+      result: z.string().optional(),
+      left: z.string().optional(),
+      right: z.string().optional(),
+      steps: z.array(z.string()).optional(),
+      target: z.string().optional(),
+    })
+    .optional(),
   // Optional typed diagram payload for Remotion-native diagrams
   diagram: z
     .object({

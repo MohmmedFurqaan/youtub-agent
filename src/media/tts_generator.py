@@ -93,6 +93,7 @@ class NarrationGenerator:
                 self.plan.voice,
                 str(self.mp3_path),
                 target_duration_ms=target_duration_ms,
+                scenes=self.plan.scenes,
             )
         )
         logger.info("[tts] narration.mp3 saved → %s", self.mp3_path)
@@ -190,8 +191,23 @@ class NarrationGenerator:
         voice: str,
         output_path: str,
         target_duration_ms: int | None = None,
+        scenes: list | None = None,
     ) -> list[dict]:
-        """Generate narration with Kokoro and return approximate word timings."""
+        """Generate narration with Kokoro and return word-boundary events.
+
+        When *scenes* is provided, TTS is generated **per scene** so that:
+          1. Each scene's speech is measured at its actual duration.
+          2. Each scene's audio is padded to its planned scene duration
+             (scene.end_ms - scene.start_ms) so the final MP3 matches the
+             VideoPlan timeline exactly.
+          3. Word events are timed to the *actual speech duration* within
+             each scene, offset by the scene's start_ms.  This guarantees
+             captions are in sync with both the audio playback AND the
+             visual scene transitions.
+
+        When *scenes* is omitted, falls back to generating one continuous
+        audio blob and evenly distributing words across the full duration.
+        """
         if KPipeline is None or sf is None:
             raise RuntimeError(
                 "Kokoro TTS requires the `kokoro` and `soundfile` packages. "
@@ -202,27 +218,38 @@ class NarrationGenerator:
         resolved_voice = NarrationGenerator._resolve_voice(voice)
         logger.info("[tts] Using Kokoro model -> lang_code=%s, voice=%s", lang_code, resolved_voice)
 
-        pipeline = KPipeline(lang_code=lang_code)
-        generator = pipeline(text, voice=resolved_voice, speed=1, split_pattern=r"\n+")
-
-        chunks: list[np.ndarray] = []
-        for _, _, audio in generator:
-            chunks.append(np.asarray(audio, dtype=np.float32))
-
-        if not chunks:
-            raise RuntimeError("Kokoro returned no audio for the narration.")
-
-        audio = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
         target_ms = int(target_duration_ms or 30000)
-        if target_ms > 0:
-            audio = NarrationGenerator._pad_audio_to_duration(audio, target_ms, KOKORO_SAMPLE_RATE)
 
+        if scenes:
+            word_events, audio = await NarrationGenerator._generate_per_scene_tts(
+                scenes, lang_code, resolved_voice, target_ms,
+            )
+        else:
+            pipeline = KPipeline(lang_code=lang_code)
+            generator = pipeline(text, voice=resolved_voice, speed=1, split_pattern=r"\n+")
+
+            chunks: list[np.ndarray] = []
+            for _, _, audio_chunk in generator:
+                chunks.append(np.asarray(audio_chunk, dtype=np.float32))
+
+            if not chunks:
+                raise RuntimeError("Kokoro returned no audio for the narration.")
+
+            audio = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
+            if target_ms > 0:
+                audio = NarrationGenerator._pad_audio_to_duration(audio, target_ms, KOKORO_SAMPLE_RATE)
+
+            timing_duration_ms = int((len(audio) / KOKORO_SAMPLE_RATE) * 1000)
+            timing_duration_ms = max(timing_duration_ms, target_ms)
+            word_events = NarrationGenerator._estimate_word_events(text, timing_duration_ms)
+
+        # ── Save MP3 ──────────────────────────────────────────────────────────
         wav_path = Path(output_path).with_suffix(".wav")
         sf.write(str(wav_path), audio, KOKORO_SAMPLE_RATE)
 
         mp3_path = Path(output_path)
         ffmpeg_bin = "ffmpeg"
-        duration_seconds = max(0.001, (target_ms or 30000) / 1000)
+        duration_seconds = max(0.001, target_ms / 1000)
         try:
             subprocess.run(
                 [
@@ -246,11 +273,86 @@ class NarrationGenerator:
             if wav_path.exists():
                 wav_path.unlink(missing_ok=True)
 
-        duration_ms = int((len(audio) / KOKORO_SAMPLE_RATE) * 1000)
-        timing_duration_ms = max(duration_ms, 1)
-        if target_ms > duration_ms:
-            timing_duration_ms = target_ms
-        return NarrationGenerator._estimate_word_events(text, timing_duration_ms)
+        logger.info("[tts] narration.mp3 saved → %s", mp3_path)
+        return word_events
+
+    @staticmethod
+    async def _generate_per_scene_tts(
+        scenes: list,
+        lang_code: str,
+        voice: str,
+        target_duration_ms: int,
+    ) -> tuple[list[dict], np.ndarray]:
+        """Generate TTS per scene, pad each to its planned duration, and return
+        word-boundary events + concatenated audio array.
+
+        Each scene's word events are timed to the *actual speech duration*
+        measured from Kokoro, offset by scene.start_ms.  The speech audio
+        is then padded with silence to span the full scene duration so the
+        final audio matches the VideoPlan timeline.
+        """
+        pipeline = KPipeline(lang_code=lang_code)
+        scene_audios: list[np.ndarray] = []
+        word_events: list[dict] = []
+
+        for scene in scenes:
+            narration = scene.narration.strip()
+            scene_start_ms = scene.start_ms
+            scene_duration_ms = scene.end_ms - scene.start_ms
+
+            if narration:
+                generator = pipeline(narration, voice=voice, speed=1, split_pattern=r"\n+")
+                chunks: list[np.ndarray] = []
+                for _, _, audio_chunk in generator:
+                    chunks.append(np.asarray(audio_chunk, dtype=np.float32))
+
+                if not chunks:
+                    scene_audio = np.zeros(1, dtype=np.float32)
+                else:
+                    scene_audio = np.concatenate(chunks) if len(chunks) > 1 else chunks[0]
+
+                actual_speech_ms = int((len(scene_audio) / KOKORO_SAMPLE_RATE) * 1000)
+
+                # Word events based on *actual* speech timing, offset by scene start
+                words = narration.split()
+                if words and actual_speech_ms > 0:
+                    ms_per_word = actual_speech_ms / len(words)
+                    for index, word in enumerate(words):
+                        word_start = int(scene_start_ms + index * ms_per_word)
+                        word_end = min(
+                            int(scene_start_ms + (index + 1) * ms_per_word),
+                            scene_start_ms + scene_duration_ms,
+                        )
+                        word_events.append({
+                            "type": "WordBoundary",
+                            "offset": word_start * 10_000,
+                            "duration": (word_end - word_start) * 10_000,
+                            "text": word,
+                        })
+
+                logger.info(
+                    "[tts] Scene %s: %d words, speech=%dms, planned=%dms",
+                    scene.id, len(words), actual_speech_ms, scene_duration_ms,
+                )
+            else:
+                scene_audio = np.zeros(1, dtype=np.float32)
+                logger.info("[tts] Scene %s: empty narration, filling %dms silence", scene.id, scene_duration_ms)
+
+            # Pad scene audio to match planned scene duration
+            scene_audio = NarrationGenerator._pad_audio_to_duration(
+                scene_audio, scene_duration_ms, KOKORO_SAMPLE_RATE
+            )
+            scene_audios.append(scene_audio)
+
+        # Concatenate all scene audios
+        audio = np.concatenate(scene_audios)
+
+        # Ensure total audio matches target duration (should already be covered
+        # by per-scene padding, but guard against rounding)
+        audio = NarrationGenerator._pad_audio_to_duration(audio, target_duration_ms, KOKORO_SAMPLE_RATE)
+
+        logger.info("[tts] Concatenated audio: %d samples (%.2fs)", len(audio), len(audio) / KOKORO_SAMPLE_RATE)
+        return word_events, audio
 
     @staticmethod
     def _measure_duration(mp3_path: Path) -> float:
