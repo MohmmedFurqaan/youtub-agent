@@ -155,15 +155,15 @@ class TestQualityCheckFailures:
         assert any("scene-01" in e for e in checker.errors)
 
     def test_native_diagram_scene_creates_asset_manifest(self, tmp_path):
-        from src.contracts.video_plan import Scene, VisualAsset
-
         run_dir = tmp_path / "runs" / "native-test"
         run_dir.mkdir(parents=True)
         assets_dir = run_dir / "assets"
         assets_dir.mkdir(parents=True)
+        from src.contracts.video_plan import Scene, VisualAsset, SceneEvent
 
         scene = Scene(
             id="scene-01",
+            story_role="hook",
             start_ms=0,
             end_ms=8000,
             narration="The client sends a request.",
@@ -177,6 +177,7 @@ class TestQualityCheckFailures:
                     "edges": [{"from": "a", "to": "b", "label": "request"}],
                 },
             ),
+            event=SceneEvent(type="flow", action="send", from_="a", to_="b", result="success"),
             transition="cut",
         )
 

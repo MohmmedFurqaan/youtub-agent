@@ -40,12 +40,24 @@ class SceneEvent(BaseModel):
     to_: str | None = Field(default=None, alias="to")
 
     label: str | None = None
-    result: str
+    result: str | None = None
 
     left: str | None = None
     right: str | None = None
     steps: list[str] | None = None
     target: str | None = None
+    cartoon_action: Literal[
+        "talk",
+        "point",
+        "think",
+        "surprised",
+        "send",
+        "receive",
+        "walk",
+        "celebrate",
+        "error",
+        "idle",
+    ] | None = None
 
     model_config = {
         "populate_by_name": True,
@@ -73,6 +85,7 @@ class VisualAsset(BaseModel):
         "image"          — Still image (Pollinations, if USE_POLLINATIONS_STILL=true).
         "stock_video"    — Licensed local stock video file.
         "screen_capture" — Screen-recording clip from the local library.
+        "code"           — Syntax-highlighted code block component.
     query:
         Provider-neutral description used by the asset resolver.
     required:
@@ -82,7 +95,7 @@ class VisualAsset(BaseModel):
         create more dynamic visuals for each diagram or still image.
     """
 
-    kind: Literal["stock_video", "image", "diagram", "screen_capture"]
+    kind: Literal["stock_video", "image", "diagram", "screen_capture", "code"]
     query: str = Field(..., min_length=5)
     required: bool = True
     background: str | None = None
@@ -90,6 +103,13 @@ class VisualAsset(BaseModel):
     # Diagram-specific (optional unless kind == 'diagram')
     template: str | None = None
     data: dict | None = None
+
+    # Code-specific (optional unless kind == 'code')
+    language: str | None = None
+    code: str | None = None
+    highlight_lines: list[int] | None = None
+    title: str | None = None
+    focus_range: list[int] | None = None
 
 
 class Scene(BaseModel):
@@ -145,6 +165,13 @@ class Scene(BaseModel):
 
     @model_validator(mode="after")
     def _validate_visual(self) -> "Scene":
+        # If visual.kind is code, ensure code is provided
+        if self.visual.kind == "code":
+            if not self.visual.code:
+                raise ValueError(f"{self.id}: code field is required for kind=code")
+            if not self.visual.language:
+                self.visual.language = "python"
+
         # If visual.kind is diagram, ensure template and data follow expectations
         if self.visual.kind == "diagram":
             templates = {

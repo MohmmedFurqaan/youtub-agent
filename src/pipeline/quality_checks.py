@@ -28,6 +28,23 @@ from src.utility.logging_config import setup_logging
 logger = setup_logging()
 
 
+import shutil
+
+def _get_ffprobe_bin() -> str:
+    path = shutil.which("ffprobe")
+    if path:
+        return path
+    try:
+        import imageio_ffmpeg
+        exe_path = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        ffprobe_cand = exe_path.parent / "ffprobe.exe"
+        if ffprobe_cand.exists():
+            return str(ffprobe_cand)
+    except Exception:
+        pass
+    return "ffprobe"
+
+
 class QualityCheckError(Exception):
     """Raised when one or more quality checks fail."""
 
@@ -58,12 +75,70 @@ class QualityChecker:
             self._check_audio_stream(probe)
         self._check_captions()
         self._check_assets_resolved()
+        self._check_semantic_plan_and_props()
+        self._check_remotion_quality_alignment()
 
         if self.errors:
             msg = "\n".join(f"  • {e}" for e in self.errors)
             raise QualityCheckError(f"Quality checks failed:\n{msg}")
 
         logger.info("[quality] All checks passed ✓")
+
+    def _check_semantic_plan_and_props(self) -> None:
+        """Verify semantic contracts between plan.json, props.json, and captions."""
+        plan_path = self.run_dir / "plan.json"
+        props_path = self.run_dir / "props.json"
+        if not plan_path.exists() or not props_path.exists():
+            return
+
+        try:
+            plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+            props_data = json.loads(props_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            self.errors.append("plan.json or props.json is not valid JSON.")
+            return
+
+        plan_scenes = plan_data.get("scenes", [])
+        props_scenes = props_data.get("scenes", [])
+
+        if len(plan_scenes) != len(props_scenes):
+            self.errors.append(
+                f"Scene count mismatch between plan.json ({len(plan_scenes)}) and props.json ({len(props_scenes)})."
+            )
+            return
+
+        for p_scene, prop_scene in zip(plan_scenes, props_scenes):
+            scene_id = p_scene.get("id")
+            kind = p_scene.get("visual", {}).get("kind")
+
+            if kind == "code":
+                code_payload = prop_scene.get("code")
+                if not code_payload or not code_payload.get("code"):
+                    self.errors.append(f"{scene_id}: plan requires code block but props.json code payload is missing or empty.")
+
+            elif kind == "diagram":
+                diagram_payload = prop_scene.get("diagram")
+                if not diagram_payload or not diagram_payload.get("data"):
+                    self.errors.append(f"{scene_id}: plan requires diagram but props.json diagram payload is missing.")
+
+    def _check_remotion_quality_alignment(self) -> None:
+        """Verify Remotion best practices, safe areas, 9:16 vertical ratio, and kinetic captions."""
+        props_path = self.run_dir / "props.json"
+        if not props_path.exists():
+            return
+        try:
+            props = json.loads(props_path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+
+        scenes = props.get("scenes", [])
+        for scene in scenes:
+            text = scene.get("onScreenText", "").strip()
+            word_count = len(text.split())
+            if word_count < 2 or word_count > 5:
+                self.errors.append(
+                    f"{scene.get('id')}: onScreenText '{text}' has {word_count} words; expected 2-5 for optimal mobile viral engagement."
+                )
 
     # ── Individual checks ─────────────────────────────────────────────────────
 
@@ -73,10 +148,11 @@ class QualityChecker:
 
     def _run_ffprobe(self) -> dict | None:
         """Run ffprobe and return parsed JSON output."""
+        ffprobe_bin = _get_ffprobe_bin()
         try:
             result = subprocess.run(
                 [
-                    "ffprobe",
+                    ffprobe_bin,
                     "-v", "quiet",
                     "-print_format", "json",
                     "-show_format",

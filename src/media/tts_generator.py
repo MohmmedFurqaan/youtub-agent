@@ -48,6 +48,20 @@ FPS = 30
 KOKORO_SAMPLE_RATE = 24000
 
 
+import shutil
+
+def _get_ffmpeg_bin() -> str:
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    return "ffmpeg"
+
+
 class TTSResult:
     """Result of a TTS generation run."""
 
@@ -248,7 +262,7 @@ class NarrationGenerator:
         sf.write(str(wav_path), audio, KOKORO_SAMPLE_RATE)
 
         mp3_path = Path(output_path)
-        ffmpeg_bin = "ffmpeg"
+        ffmpeg_bin = _get_ffmpeg_bin()
         duration_seconds = max(0.001, target_ms / 1000)
         try:
             subprocess.run(

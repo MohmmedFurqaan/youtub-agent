@@ -390,6 +390,29 @@ class StillImageResolver(BaseResolver):
         return None
 
 
+# ── CodeResolver ─────────────────────────────────────────────────────────────
+
+
+class CodeResolver(BaseResolver):
+    """Generates a placeholder manifest for kind=code so Remotion can render CodeBlock natively."""
+
+    def resolve(self, scene: Scene) -> ResolvedAsset | None:
+        if scene.visual.kind != "code":
+            return None
+        scene_dir = self._scene_dir(scene)
+        dest = scene_dir / "asset.txt"
+        dest.write_text(scene.visual.code or "", encoding="utf-8")
+        resolved = ResolvedAsset(
+            scene_id=scene.id,
+            local_path=dest,
+            kind="code",
+            source="code",
+            license="generated",
+        )
+        self._write_manifest(resolved)
+        return resolved
+
+
 # ── Env helper ────────────────────────────────────────────────────────────────
 
 
@@ -406,8 +429,9 @@ class AssetOrchestrator:
 
     Priority:
       1. DiagramResolver  (for kind=diagram, always first)
-      2. StillImageResolver (for kind=image, only if USE_POLLINATIONS_STILL=true)
-      3. LocalAssetResolver (fallback)
+      2. CodeResolver     (for kind=code)
+      3. StillImageResolver (for kind=image, only if USE_POLLINATIONS_STILL=true)
+      4. LocalAssetResolver (fallback)
 
     If scene.visual.required is True and no resolver succeeds, raises RuntimeError.
     """
@@ -418,6 +442,7 @@ class AssetOrchestrator:
 
         self.resolvers: list[BaseResolver] = [
             DiagramResolver(self.run_assets_dir),
+            CodeResolver(self.run_assets_dir),
             StillImageResolver(self.run_assets_dir),
             LocalAssetResolver(self.run_assets_dir, library_dir),
         ]

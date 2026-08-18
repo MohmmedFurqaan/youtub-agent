@@ -28,9 +28,6 @@ from src.utility.logging_config import setup_logging
 class VideoScriptGeneratorAgent:
     """Generates and validates a VideoPlan from a user topic via NVIDIA Nemotron."""
 
-    # Load OpenRouter key once at class level.
-    OPENROUTER_API_KEY, _, _ = load_all_env()
-
     def __init__(
         self,
         topic: str,

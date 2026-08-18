@@ -1,5 +1,5 @@
 // Entry point — registers the Remotion root.
 import { registerRoot } from "remotion";
-import { RemotionRootWithSounds } from "./Root";
+import { RemotionRoot } from "./Root";
 
-registerRoot(RemotionRootWithSounds);
+registerRoot(RemotionRoot);

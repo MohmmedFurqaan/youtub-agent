@@ -31,14 +31,14 @@ from pathlib import Path
 
 from src.utility.load_envs import load_all_env
 from src.utility.logging_config import setup_logging
+from src.pipeline.run_pipeline import RunPipeline
 
 logger = setup_logging()
 
 
 def cmd_create(args: argparse.Namespace) -> int:
     """Create command: generate plan → assets → TTS → render → quality check."""
-    from src.pipeline.run_pipeline import RunPipeline
-
+    
     OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, _ = load_all_env()
 
     cached_plan = Path(args.use_cached_plan) if args.use_cached_plan else None

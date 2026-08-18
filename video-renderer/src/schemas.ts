@@ -23,11 +23,21 @@ export const scenePropSchema = z.object({
   durationInFrames: z.number().int().positive(),
   /** Relative path inside video-renderer/public/runs/<run-id>/ */
   assetSrc: z.string(),
-  assetKind: z.enum(["stock_video", "image", "diagram", "screen_capture"]),
+  assetKind: z.enum(["stock_video", "image", "diagram", "screen_capture", "code"]),
   onScreenText: z.string(),
   transition: z.enum(["cut", "fade", "slide", "zoom-punch", "glitch"]),
   storyRole: z.string().optional(),
   background: z.string().optional(),
+  // Code block payload when assetKind === "code"
+  code: z
+    .object({
+      language: z.string().default("python"),
+      code: z.string(),
+      highlightLines: z.array(z.number().int()).optional().default([]),
+      title: z.string().optional(),
+      focusRange: z.array(z.number().int()).optional(),
+    })
+    .optional(),
   // Optional event data for diagram animation context
   event: z
     .object({
@@ -41,6 +51,20 @@ export const scenePropSchema = z.object({
       right: z.string().optional(),
       steps: z.array(z.string()).optional(),
       target: z.string().optional(),
+      cartoonAction: z
+        .enum([
+          "talk",
+          "point",
+          "think",
+          "surprised",
+          "send",
+          "receive",
+          "walk",
+          "celebrate",
+          "error",
+          "idle",
+        ])
+        .optional(),
     })
     .optional(),
   // Optional typed diagram payload for Remotion-native diagrams

@@ -26,9 +26,8 @@ import type { SceneProp } from "../schemas";
 import { ParticleBackground } from "./ParticleBackground";
 import { CartoonCharacter } from "./CartoonCharacter";
 import { KineticTextOverlay } from "./KineticTextOverlay";
+import { CodeBlock } from "./CodeBlock";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
-import { useSoundOnChange } from "react-sounds";
-import { SOUND_LIBRARY, TRANSITION_SOUND } from "../config/SoundConfig";
 
 interface Props {
   scene: SceneProp;
@@ -165,19 +164,7 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
   const sceneStartMs = (scene.fromFrame / fps) * 1000;
   const sceneDurationMs = (scene.durationInFrames / fps) * 1000;
 
-  // Interactive sound triggers (Studio / Player preview via react-sounds).
-  // The <Audio> components in ShortVideo.tsx handle the rendered output.
-  const transitionSoundName = TRANSITION_SOUND[scene.transition] || "ui/toggle_on";
-  const transitionSound = SOUND_LIBRARY[transitionSoundName];
 
-  // Trigger transition sound at scene start (frame 0 of sequence)
-  useSoundOnChange(
-    transitionSoundName,
-    frame === 0,
-    { volume: transitionSound.volume },
-  );
-
-  // Infer role from scene id if not passed (scene-01 = hook, etc.)
   const roleFromId = (() => {
     if (scene.id.includes("01")) return "hook";
     if (scene.id.includes("02")) return "problem";
@@ -193,10 +180,12 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
     ? "bottom-right"
     : "bottom-left";
 
-  // Background — always include ParticleBackground as base layer so
-  // scenes with missing/unresolved assets still render a visible background
   const renderBackground = () => {
-    if (scene.assetKind === "diagram" || scene.assetKind === "screen_capture") {
+    if (
+      scene.assetKind === "diagram" ||
+      scene.assetKind === "code" ||
+      scene.assetKind === "screen_capture"
+    ) {
       return <ParticleBackground background={scene.background} />;
     }
     return (
@@ -208,7 +197,19 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
     );
   };
 
-  // Diagram layer
+  const renderCode = () => {
+    if (scene.assetKind !== "code" || !scene.code) return null;
+    return (
+      <CodeBlock
+        code={scene.code.code}
+        language={scene.code.language}
+        highlightLines={scene.code.highlightLines}
+        title={scene.code.title}
+        focusRange={scene.code.focusRange as any}
+      />
+    );
+  };
+
   const renderDiagram = () => {
     const diag = (scene as any).diagram;
     if (!diag) return null;
@@ -223,7 +224,6 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
     );
   };
 
-  // Transition
   const renderTransition = () => {
     switch (scene.transition) {
       case "fade":  return <FadeIn />;
@@ -239,11 +239,13 @@ export const SceneRenderer: React.FC<Props> = ({ scene, storyRole }) => {
       {renderBackground()}
       <Vignette />
       {renderDiagram()}
+      {renderCode()}
       <CartoonCharacter
         seed={scene.id}
         storyRole={role}
         position={charPosition as any}
         size={280}
+        action={scene.event?.cartoonAction as any}
       />
       <KineticTextOverlay text={scene.onScreenText} storyRole={role} />
       {renderTransition()}

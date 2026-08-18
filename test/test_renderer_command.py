@@ -13,13 +13,14 @@ import subprocess
 from pathlib import Path
 from unittest.mock import call, patch, MagicMock
 import uuid
+from src.pipeline.run_pipeline import RunPipeline
+
 
 import pytest
 
 
 def _make_pipeline(tmp_path: Path):
     """Create a RunPipeline with run_dir in tmp_path."""
-    from src.pipeline.run_pipeline import RunPipeline
 
     run_id = str(uuid.uuid4())
     run_dir = tmp_path / "runs" / run_id
@@ -65,8 +66,8 @@ class TestRendererCommand:
             cmd = mock_run.call_args[0][0]
             cmd_str = " ".join(str(c) for c in cmd)
 
-            assert "npx" in cmd
-            assert "remotion" in cmd
+            assert "npx" in cmd or any("remotion" in str(c) for c in cmd)
+            assert any("remotion" in str(c) for c in cmd)
             assert "render" in cmd
             assert "ShortVideo" in cmd
             assert any("props.json" in c for c in cmd)

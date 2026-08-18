@@ -2,12 +2,10 @@
  * config/SoundConfig.ts
  *
  * Maps animation events and scene transitions to sound-effect cues.
- * Used both by `react-sounds` (useSound hook, interactive preview) and
- * by Remotion `<Audio>` + `<Sequence>` (server-side rendering).
+ * Used by Remotion <Audio> + <Sequence> (server-side rendering & studio preview).
  *
- * Sound files live in `video-renderer/public/sounds/` so that:
- *   1. `react-sounds` loads them locally (bypassing the CDN)
- *   2. Remotion's `staticFile()` can resolve them for rendering
+ * Sound files live in `video-renderer/public/sounds/` so that
+ * Remotion's `staticFile()` can resolve them for rendering.
  */
 
 import { staticFile } from "remotion";

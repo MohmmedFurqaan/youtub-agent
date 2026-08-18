@@ -21,9 +21,14 @@ dependencies = [
     "soundfile>=0.14.0",
     "tavily-python>=0.7.26",
     "tornado>=6.5.7",
+    "imageio-ffmpeg>=0.5.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+

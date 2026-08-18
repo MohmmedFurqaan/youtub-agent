@@ -195,7 +195,18 @@ class RunPipeline:
                 "transition": scene.transition,
                 "background": scene.visual.background,
                 "storyRole": getattr(scene, "story_role", None) or scene.id.split("-")[-1],
+                "event": scene.event.model_dump(by_alias=True, exclude_none=True),
             })
+
+            if scene.visual.kind == "code":
+                scene_props[-1]["code"] = {
+                    "language": scene.visual.language or "python",
+                    "code": scene.visual.code or "",
+                    "highlightLines": scene.visual.highlight_lines or [],
+                    "title": scene.visual.title or "",
+                    "focusRange": scene.visual.focus_range,
+                }
+
             if scene.visual.kind == "diagram":
                 diagram_data = dict(scene.visual.data or {})
 
@@ -205,11 +216,6 @@ class RunPipeline:
                 )
 
                 diagram_data["animationTimeline"] = animation_timeline
-
-                scene_props[-1]["event"] = scene.event.model_dump(
-                    by_alias=True,
-                    exclude_none=True,
-                )
 
                 scene_props[-1]["diagram"] = {
                     "template": scene.visual.template,
@@ -415,32 +421,27 @@ class RunPipeline:
     def _render(self, props_path: Path, output_mp4: Path) -> None:
         """Stage 7: invoke Remotion renderer via subprocess."""
         logger.info("[pipeline] Starting Remotion render …")
-        # Prefer invoking the local remotion binary if present to avoid
-        # npx/npm attempting to fetch packages from the registry.
         local_remotion = _RENDERER_DIR / "node_modules" / ".bin" / "remotion"
-        # Debug: log whether the local remotion candidate exists and is executable
-        try:
-            exists = local_remotion.exists()
-            is_file = local_remotion.is_file()
-            mode = oct(local_remotion.stat().st_mode & 0o777) if exists else "n/a"
-        except Exception:
-            exists = False
-            is_file = False
-            mode = "err"
-        logger.info("[pipeline] local remotion candidate: %s exists=%s is_file=%s mode=%s", local_remotion, exists, is_file, mode)
-        if local_remotion.exists():
+        local_remotion_cmd = _RENDERER_DIR / "node_modules" / ".bin" / "remotion.cmd"
+
+        use_shell = False
+        if local_remotion_cmd.exists():
+            cmd = [str(local_remotion_cmd.resolve()), "render", "ShortVideo", str(output_mp4.resolve()), f"--props={props_path.resolve()}"]
+        elif local_remotion.exists():
             cmd = [str(local_remotion.resolve()), "render", "ShortVideo", str(output_mp4.resolve()), f"--props={props_path.resolve()}"]
         else:
-            # Fallback to npx when local binary isn't available
-            cmd = ["npx", "remotion", "render", "ShortVideo", str(output_mp4.resolve()), f"--props={props_path.resolve()}"]
+            npx_bin = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
+            cmd = [npx_bin, "remotion", "render", "ShortVideo", str(output_mp4.resolve()), f"--props={props_path.resolve()}"]
+            use_shell = sys.platform == "win32"
 
         logger.info("[pipeline] Render command: %s", " ".join(cmd))
 
         subprocess.run(
             cmd,
             cwd=str(_RENDERER_DIR),
-            check=True,  # raises CalledProcessError on failure
+            check=True,
             text=True,
+            shell=use_shell,
         )
         logger.info("[pipeline] Remotion render complete → %s", output_mp4)
 

@@ -21,6 +21,17 @@ interface Props {
   storyRole?: string;
   position?: "bottom-left" | "bottom-right" | "bottom-center";
   size?: number;
+  action?:
+    | "talk"
+    | "point"
+    | "think"
+    | "surprised"
+    | "send"
+    | "receive"
+    | "walk"
+    | "celebrate"
+    | "error"
+    | "idle";
 }
 
 const ROLE_TO_STYLE: Record<string, string> = {
@@ -40,6 +51,19 @@ const ROLE_TO_COLOR: Record<string, string> = {
   insight: "34d399",
 };
 
+const ACTION_TO_STYLE: Record<string, string> = {
+  talk: "bottts-neutral",
+  point: "adventurer",
+  think: "fun-emoji",
+  surprised: "big-smile",
+  send: "bottts-neutral",
+  receive: "thumbs",
+  walk: "adventurer",
+  celebrate: "thumbs",
+  error: "big-smile",
+  idle: "bottts-neutral",
+};
+
 function buildDiceBearUrl(style: string, seed: string, size: number, bg: string): string {
   const params = new URLSearchParams({
     seed,
@@ -56,11 +80,12 @@ export const CartoonCharacter: React.FC<Props> = ({
   storyRole = "explanation",
   position = "bottom-right",
   size = 320,
+  action = "idle",
 }) => {
   const frame = useCurrentFrame();
-  const { width, height: _height } = useVideoConfig();
+  const { width } = useVideoConfig();
 
-  const style = ROLE_TO_STYLE[storyRole] ?? "bottts-neutral";
+  const style = ACTION_TO_STYLE[action] ?? ROLE_TO_STYLE[storyRole] ?? "bottts-neutral";
   const bgColor = ROLE_TO_COLOR[storyRole] ?? "3b82f6";
   const avatarUrl = buildDiceBearUrl(style, seed, size, bgColor);
 
@@ -77,9 +102,30 @@ export const CartoonCharacter: React.FC<Props> = ({
     extrapolateRight: "clamp",
   });
 
-  // Idle bounce
-  const bounce = Math.sin(frame * 0.08) * 8;
-  const tilt = Math.sin(frame * 0.05) * 3;
+  // Action-driven motion dynamics
+  let bounce = Math.sin(frame * 0.08) * 8;
+  let tilt = Math.sin(frame * 0.05) * 3;
+  let scaleAction = 1.0;
+
+  if (action === "talk") {
+    bounce = Math.sin(frame * 0.25) * 12;
+  } else if (action === "point") {
+    tilt = -12 + Math.sin(frame * 0.1) * 4;
+  } else if (action === "think") {
+    tilt = 15;
+    bounce = Math.sin(frame * 0.04) * 4;
+  } else if (action === "surprised") {
+    scaleAction = 1.1 + Math.abs(Math.sin(frame * 0.2)) * 0.08;
+    bounce = -10;
+  } else if (action === "celebrate") {
+    bounce = -15 + Math.abs(Math.sin(frame * 0.3)) * 25;
+    tilt = Math.sin(frame * 0.2) * 10;
+  } else if (action === "walk") {
+    bounce = Math.abs(Math.sin(frame * 0.2)) * 14;
+    tilt = Math.sin(frame * 0.15) * 6;
+  } else if (action === "error") {
+    tilt = (frame % 4 < 2 ? 6 : -6);
+  }
 
   // Positioning
   const padding = 60;
@@ -105,8 +151,9 @@ export const CartoonCharacter: React.FC<Props> = ({
         width: size,
         height: size,
         opacity: entryOpacity,
-        transform: `translateY(${bounce}px) rotate(${tilt}deg)`,
+        transform: `translateY(${bounce}px) rotate(${tilt}deg) scale(${scaleAction})`,
         filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.5))",
+        zIndex: 25,
       }}
     >
       {/* Glow ring behind avatar */}
@@ -116,7 +163,6 @@ export const CartoonCharacter: React.FC<Props> = ({
           inset: -12,
           borderRadius: "50%",
           background: `radial-gradient(circle, #${bgColor}44 0%, transparent 70%)`,
-          animation: "none",
         }}
       />
       <img

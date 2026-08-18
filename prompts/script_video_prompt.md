@@ -329,9 +329,20 @@ Technical concepts should normally be represented using deterministic Remotion d
 `visual.kind` MUST be one of:
 
 * `diagram`
+* `code`
 * `image`
 * `screen_capture`
 * `stock_video`
+
+When `kind` is `code`, supply:
+* `language`: e.g. "python", "typescript", "json"
+* `code`: multiline string containing clear source code snippet
+* `highlight_lines`: array of 1-indexed line numbers to highlight
+* `title`: file name header e.g. "main.py"
+* `focus_range`: [start_line, end_line] optional focus line range
+
+When `event` is specified, optionally supply `cartoon_action`:
+* `talk`, `point`, `think`, `surprised`, `send`, `receive`, `walk`, `celebrate`, `error`, `idle`
 
 Never use a template name as `kind`.
 
