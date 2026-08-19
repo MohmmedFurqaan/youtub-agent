@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import call, patch, MagicMock
 import uuid
+# pyrefly: ignore [missing-import]
 from src.pipeline.run_pipeline import RunPipeline
 
 
@@ -103,6 +104,7 @@ class TestRendererCommand:
 
     def test_cwd_is_renderer_dir(self, tmp_path):
         """subprocess must run inside video-renderer/."""
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import _RENDERER_DIR
 
         pipeline = _make_pipeline(tmp_path)

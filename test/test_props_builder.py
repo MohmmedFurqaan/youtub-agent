@@ -15,9 +15,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import Scene, VisualAsset, VideoPlan, YouTubeMetadata
+# pyrefly: ignore [missing-import]
 from src.media.asset_resolver import ResolvedAsset
+# pyrefly: ignore [missing-import]
 from src.media.tts_generator import TTSResult
+# pyrefly: ignore [missing-import]
 from src.media.captions import CaptionRecord
 
 
@@ -121,6 +125,7 @@ class TestPropsBuilder:
 
     def test_props_structure(self, tmp_path):
         """props.json must contain audioSrc, scenes, captions."""
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import RunPipeline
 
         plan = _make_plan()
@@ -141,6 +146,7 @@ class TestPropsBuilder:
 
     def test_scene_frame_windows(self, tmp_path):
         """Scenes must have correct fromFrame and durationInFrames (@ 30 fps)."""
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import RunPipeline
 
         plan = _make_plan()
@@ -162,6 +168,7 @@ class TestPropsBuilder:
 
     def test_asset_src_paths(self, tmp_path):
         """assetSrc must be relative to public/runs/<run-id>/."""
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import RunPipeline
 
         plan = _make_plan()
@@ -177,6 +184,7 @@ class TestPropsBuilder:
             assert scene_prop["assetSrc"].endswith("asset.svg")
 
     def test_audio_src_path(self, tmp_path):
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import RunPipeline
 
         plan = _make_plan()
@@ -190,6 +198,7 @@ class TestPropsBuilder:
         assert props["audioSrc"] == f"runs/{pipeline.run_id}/audio/narration.mp3"
 
     def test_captions_preserved(self, tmp_path):
+        # pyrefly: ignore [missing-import]
         from src.pipeline.run_pipeline import RunPipeline
 
         plan = _make_plan()
@@ -207,6 +216,7 @@ class TestPropsBuilder:
 def _make_pipeline(tmp_path: Path):
     """Create a RunPipeline with its run_dir redirected to tmp_path."""
     import uuid
+    # pyrefly: ignore [missing-import]
     from src.pipeline.run_pipeline import RunPipeline, _DATA_DIR
     from unittest.mock import patch
 

@@ -65,8 +65,6 @@ class RunPipeline:
         logger.info("[pipeline] Run ID: %s", self.run_id)
         logger.info("[pipeline] Run dir: %s", self.run_dir)
 
-    # ── Public ────────────────────────────────────────────────────────────────
-
     def execute(self) -> Path:
         """Run all pipeline stages.
 
@@ -134,7 +132,6 @@ class RunPipeline:
 
         return self.run_dir / "final.mp4"
 
-    # ── Stage implementations ─────────────────────────────────────────────────
 
     def _get_plan(self) -> VideoPlan:
         """Stage 2: generate or load the VideoPlan."""
@@ -231,7 +228,6 @@ class RunPipeline:
             "audioSrc": audio_src,
             "scenes": scene_props,
             "captions": tts_result.captions,
-            "musicSrc": "music/tech_ambient.mp3",
         }
 
         props_path = self.run_dir / "props.json"

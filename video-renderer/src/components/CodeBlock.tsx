@@ -112,15 +112,15 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
     <div
       style={{
         position: "absolute",
-        top: SAFE_AREAS.content.top + 100,
+        top: 360,
         left: 40,
         right: 40,
-        bottom: SAFE_AREAS.captions.bottom + 160,
+        bottom: 300,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        zIndex: 20,
+        zIndex: 35,
         opacity,
         transform: `scale(${scale})`,
         pointerEvents: "none",
@@ -130,11 +130,11 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
         style={{
           width: "100%",
           maxWidth: 1000,
-          background: "rgba(15, 23, 42, 0.92)",
+          background: "rgba(15, 23, 42, 0.96)",
           borderRadius: 20,
-          border: "2px solid rgba(59, 130, 246, 0.4)",
+          border: "3px solid rgba(59, 130, 246, 0.6)",
           boxShadow:
-            "0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 30px rgba(59, 130, 246, 0.2)",
+            "0 25px 60px -10px rgba(0, 0, 0, 0.9), 0 0 40px rgba(59, 130, 246, 0.3)",
           backdropFilter: "blur(16px)",
           overflow: "hidden",
           display: "flex",

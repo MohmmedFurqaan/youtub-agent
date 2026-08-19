@@ -29,7 +29,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from src.utility.load_envs import load_all_env
+from src.utility.load_all_env import load_all_env
 from src.utility.logging_config import setup_logging
 from src.pipeline.run_pipeline import RunPipeline
 
@@ -39,7 +39,7 @@ logger = setup_logging()
 def cmd_create(args: argparse.Namespace) -> int:
     """Create command: generate plan → assets → TTS → render → quality check."""
     
-    OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, _ = load_all_env()
+    OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, HF_MODEL_NAME, HF_API_KEY, YOUTUBE_CONFIGURATION  = load_all_env()
 
     cached_plan = Path(args.use_cached_plan) if args.use_cached_plan else None
     if cached_plan and not cached_plan.exists():
@@ -124,7 +124,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-agent",
-        description="YouTube Short generator — Remotion pipeline (no text-to-video APIs).",
+        description="YouTube Short generator — Remotion pipeline",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -16,8 +16,11 @@ import json
 from pathlib import Path
 import pytest
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import VideoPlan, validate_video_plan
+# pyrefly: ignore [missing-import]
 from src.media.asset_resolver import AssetOrchestrator
+# pyrefly: ignore [missing-import]
 from src.pipeline.quality_checks import QualityChecker, QualityCheckError
 
 
@@ -64,6 +67,7 @@ def _make_scene(
     }
     if visual_kind == "diagram":
         scene_dict["visual"]["template"] = template or "request-flow"
+        # pyrefly: ignore [bad-assignment]
         scene_dict["visual"]["data"] = data or {
             "nodes": [
                 {"id": "n1", "label": "Client", "icon": "smartphone"},
@@ -81,6 +85,7 @@ def _make_scene(
     elif visual_kind == "code":
         scene_dict["visual"]["language"] = "python"
         scene_dict["visual"]["code"] = code or "def hello():\n    print('Hello World')\n"
+        # pyrefly: ignore [bad-assignment]
         scene_dict["visual"]["highlight_lines"] = highlight_lines or [2]
         scene_dict["visual"]["title"] = "main.py"
         scene_dict["event"]["target"] = target or "n1"

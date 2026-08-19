@@ -24,6 +24,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import google.oauth2.credentials
 
+# pyrefly: ignore [missing-import]
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()
@@ -147,6 +148,7 @@ def upload_video(
     )
 
     print("\nUploading…")
+    # pyrefly: ignore [missing-attribute]
     request = youtube.videos().insert(
         part="snippet,status",
         body=request_body,

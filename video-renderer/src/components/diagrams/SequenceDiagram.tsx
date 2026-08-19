@@ -144,7 +144,9 @@ const SequenceDiagram: React.FC<BaseDiagramProps> = ({ data, sceneStartMs = 0, s
           const fromPos = nodePositions[fromIdx];
           const toPos = nodePositions[toIdx];
           const progress = Math.min(1, Math.max(0, (currentMs - event.atMs) / event.durationMs));
-          const packetX = interpolate(progress, [0, 1], [fromPos.x + 110, toPos.x - 110], { extrapolateRight: "clamp" });
+          const startOffsetX = fromPos.x < toPos.x ? 110 : (fromPos.x > toPos.x ? -110 : 0);
+          const endOffsetX = fromPos.x < toPos.x ? -110 : (fromPos.x > toPos.x ? 110 : 0);
+          const packetX = interpolate(progress, [0, 1], [fromPos.x + startOffsetX, toPos.x + endOffsetX], { extrapolateRight: "clamp" });
           const packetY = interpolate(progress, [0, 1], [fromPos.y + 21, toPos.y + 21], { extrapolateRight: "clamp" });
           const size = 13 + 7 * Math.sin(progress * Math.PI);
 

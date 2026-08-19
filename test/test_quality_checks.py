@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# pyrefly: ignore [missing-import]
 from src.pipeline.quality_checks import QualityCheckError, QualityChecker
 
 
@@ -159,6 +160,7 @@ class TestQualityCheckFailures:
         run_dir.mkdir(parents=True)
         assets_dir = run_dir / "assets"
         assets_dir.mkdir(parents=True)
+        # pyrefly: ignore [missing-import]
         from src.contracts.video_plan import Scene, VisualAsset, SceneEvent
 
         scene = Scene(

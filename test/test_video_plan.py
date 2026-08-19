@@ -8,6 +8,7 @@ Run with:  uv run pytest test/test_video_plan.py -v
 import numpy as np
 import pytest
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import (
     Scene,
     VisualAsset,
@@ -15,6 +16,7 @@ from src.contracts.video_plan import (
     YouTubeMetadata,
     validate_video_plan,
 )
+# pyrefly: ignore [missing-import]
 from src.model.service.prompt_agent import VideoScriptGeneratorAgent
 
 
@@ -109,6 +111,7 @@ class TestValidPlan:
         assert plan.scenes[0].visual.background == "midnight-blue"
 
     def test_narration_is_padded_to_target_duration(self):
+        # pyrefly: ignore [missing-import]
         from src.media.tts_generator import NarrationGenerator
 
         short_audio = np.zeros(24000, dtype=np.float32)

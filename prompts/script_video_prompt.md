@@ -223,7 +223,12 @@ The CTA must never replace the technical explanation.
 
 Target total narration length:
 
-Approximately 65–80 words for the complete video, based on a natural speaking rate of roughly 130–160 words per minute.
+Approximately 65–80 words for the complete 30-second video, based on a natural speaking rate of roughly 130–160 words per minute.
+
+CRITICAL AUDIO CONTINUITY RULE:
+* Write a smooth, continuous audio script for the entire 30-second video.
+* Do NOT make sudden abrupt cuts or artificial silences between scenes.
+* The narration across scenes must form a single, seamlessly flowing explanation from Scene 1 to Scene 5 without awkward pauses or disjointed sentence breaks.
 
 Each scene:
 
@@ -250,7 +255,7 @@ If a technical term is essential, explain it immediately using simple language.
 
 Narration timing is extremely important.
 
-The narration must be long enough to naturally occupy approximately the scene duration at a normal speaking pace.
+The narration must be long enough to naturally occupy approximately the scene duration at a normal speaking pace without long silent gaps or sudden cuts.
 
 Do not pad narration to reach a target word count. If a scene can be explained clearly in fewer words, use fewer words and allow the renderer to use the remaining time for the visual event.
 
@@ -263,7 +268,7 @@ Narration: "Rate limiting protects your server."
 
 Instead provide enough meaningful narration to fill the scene naturally.
 
-The final narration should target approximately 65–80 words total, but natural language quality is more important than reaching the upper bound.
+The final narration should target approximately 65–80 words total, flowing continuously across all 5 scenes without mid-video cuts.
 
 ---
 

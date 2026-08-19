@@ -17,6 +17,7 @@ def setup_logging(name: str = __name__) -> logging.Logger:
     """
 
     # Reconfigure stdout to use UTF-8 to handle the emojis sent by the user
+    # pyrefly: ignore [missing-attribute]
     sys.stdout.reconfigure(encoding='utf-8')
 
     # Get project root directory

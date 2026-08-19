@@ -30,7 +30,9 @@ except ImportError:  # pragma: no cover - surfaced at runtime when package missi
     sf = None
     KPipeline = None
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import VideoPlan
+# pyrefly: ignore [missing-import]
 from src.media.captions import (
     CaptionRecord,
     build_captions_from_narration,
@@ -38,6 +40,7 @@ from src.media.captions import (
     save_captions,
     validate_captions,
 )
+# pyrefly: ignore [missing-import]
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()
@@ -305,6 +308,7 @@ class NarrationGenerator:
         is then padded with silence to span the full scene duration so the
         final audio matches the VideoPlan timeline.
         """
+        # pyrefly: ignore [not-callable]
         pipeline = KPipeline(lang_code=lang_code)
         scene_audios: list[np.ndarray] = []
         word_events: list[dict] = []
@@ -373,6 +377,7 @@ class NarrationGenerator:
         """Return the duration of an MP3 file in seconds."""
         try:
             audio = MP3(str(mp3_path))
+            # pyrefly: ignore [missing-attribute]
             return float(audio.info.length)
         except Exception:
             return 0.0

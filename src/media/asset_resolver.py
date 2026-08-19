@@ -27,7 +27,9 @@ from typing import NamedTuple
 
 import requests
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import Scene
+# pyrefly: ignore [missing-import]
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()

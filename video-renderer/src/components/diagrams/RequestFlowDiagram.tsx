@@ -784,22 +784,19 @@ const RequestFlowDiagram: React.FC<BaseDiagramProps> = ({
              * for a few frames so the movement doesn't
              * appear to pop.
              */
+            const startOffsetX = fromPosition.x < toPosition.x ? 126 : -126;
+            const endOffsetX = fromPosition.x < toPosition.x ? -126 : 126;
+
             const packetX = interpolate(
               progress,
               [0, 1],
               [
-                fromPosition.x + 126,
-                toPosition.x - 126,
+                fromPosition.x + startOffsetX,
+                toPosition.x + endOffsetX,
               ],
               {
                 extrapolateLeft: "clamp",
                 extrapolateRight: "clamp",
-                easing: Easing.bezier(
-                  0.16,
-                  1,
-                  0.3,
-                  1
-                ),
               }
             );
 

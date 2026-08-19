@@ -109,11 +109,6 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
 
   return (
     <AbsoluteFill style={{ background: "#030712", width, height }}>
-      {/* Background music */}
-      {musicSrc && (
-        <Audio src={staticFile(musicSrc)} volume={0.12} loop />
-      )}
-
       {/* Narration audio */}
       <Audio src={staticFile(audioSrc)} />
 

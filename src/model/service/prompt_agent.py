@@ -20,8 +20,11 @@ from pathlib import Path
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import VideoPlan, validate_video_plan
+# pyrefly: ignore [missing-import]
 from src.utility.load_envs import load_all_env
+# pyrefly: ignore [missing-import]
 from src.utility.logging_config import setup_logging
 
 
@@ -45,7 +48,6 @@ class VideoScriptGeneratorAgent:
         prompts_dir = Path(__file__).resolve().parents[3] / "prompts"
         self.system_prompt = self._load_prompt(prompts_dir / "script_video_prompt.md")
 
-    # ── Public API ────────────────────────────────────────────────────────────
 
     def generate(self, run_dir: Path) -> VideoPlan:
         """Call the LLM, validate the result, save plan.json, and return it.
@@ -91,7 +93,6 @@ class VideoScriptGeneratorAgent:
         validate_video_plan(plan)
         return plan
 
-    # ── Private helpers ───────────────────────────────────────────────────────
 
     def _invoke_llm(self) -> str:
         """Call the OpenRouter model and return the raw content string."""
@@ -100,8 +101,8 @@ class VideoScriptGeneratorAgent:
             model_provider="openrouter",
         )
         messages = [
-            SystemMessage(self.system_prompt),
-            HumanMessage(self.topic),
+            SystemMessage(self.system_prompt.strip()),
+            HumanMessage(f'prepare a video-plan on : {self.topic.strip()}')
         ]
         response = model.invoke(messages)
         return str(response.content).strip()
