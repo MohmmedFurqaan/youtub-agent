@@ -2,276 +2,48 @@
 test/test_video_plan.py
 
 Unit tests for VideoPlan Pydantic contract and validate_video_plan().
-Run with:  uv run pytest test/test_video_plan.py -v
 """
 
-import numpy as np
 import pytest
-
-# pyrefly: ignore [missing-import]
-from src.contracts.video_plan import (
-    Scene,
-    VisualAsset,
-    VideoPlan,
-    YouTubeMetadata,
-    validate_video_plan,
-)
-# pyrefly: ignore [missing-import]
-from src.model.service.prompt_agent import VideoScriptGeneratorAgent
+from src.contracts.video_plan import VideoPlan, validate_video_plan
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-
-def _make_youtube() -> dict:
-    return {
-        "title": "How APIs Work",
-        "description": "A 30-second explanation of API request flow.",
-        "tags": ["API", "Tech", "Shorts"],
-        "category_id": "22",
-    }
-
-
-def _make_scenes(count: int = 5) -> list[dict]:
-    """Build `count` gapless scenes that total exactly 30 000 ms."""
-    assert count in (4, 5), "fixture only supports 4 or 5 scenes"
-    if count == 4:
-        boundaries = [0, 8000, 15000, 22000, 30000]
-    else:
-        boundaries = [0, 6000, 12000, 18000, 24000, 30000]
-
-    roles = ["hook", "problem", "explanation", "mechanism", "key insight"]
-    scenes = []
-    for i in range(count):
-        scenes.append({
-            "id": f"scene-0{i + 1}",
-            "story_role": roles[i],
-            "start_ms": boundaries[i],
-            "end_ms": boundaries[i + 1],
-            "narration": "Your phone sends a request to the API.",
-            "on_screen_text": "REQUEST SENT",
-            "visual": {
-                "kind": "diagram",
-                "query": "phone-to-API flow, dark style",
-                "template": "request-flow",
-                "data": {
-                    "nodes": [{"id": "a", "label": "Client", "icon": "smartphone"},{"id": "b", "label": "API", "icon": "server"}],
-                    "edges": [{"from": "a", "to": "b", "label": "request"}],
-                    "highlightEdge": 0,
-                },
-            },
-            "event": {
-                "type": "flow",
-                "action": "send",
-                "from": "a",
-                "to": "b",
-                "label": "request",
-                "result": "success",
-            },
-            "transition": "cut",
-        })
-    return scenes
-
-
-def _make_valid_plan(scene_count: int = 5) -> dict:
+def _make_valid_plan_dict() -> dict:
     return {
         "topic": "How an API request works",
-        "youtube": _make_youtube(),
-        "scenes": _make_scenes(scene_count),
+        "hook": "Ever wondered what happens when you press Enter?",
+        "voice_script": "When you hit Enter, your browser resolves DNS, connects via TLS, and sends an HTTP payload to the server.",
+        "motion_prompt": "A cinematic 30-second visual animation showing data packets traveling through neon light highways into a server gateway.",
+        "youtube": {
+            "title": "How an API Request Works in 30 Seconds",
+            "description": "Watch what happens behind the scenes when an API request is sent!",
+            "tags": ["api", "tech", "programming"],
+            "category_id": "28",
+        },
     }
 
 
-# ── Valid input ───────────────────────────────────────────────────────────────
+def test_valid_video_plan():
+    plan_dict = _make_valid_plan_dict()
+    plan = VideoPlan.model_validate(plan_dict)
+    validate_video_plan(plan)
+
+    assert plan.topic == "How an API request works"
+    assert plan.hook.startswith("Ever wondered")
+    assert len(plan.motion_prompt) > 20
 
 
-class TestValidPlan:
-    def test_four_scenes(self):
-        plan = VideoPlan.model_validate(_make_valid_plan(4))
-        with pytest.raises(ValueError, match="exactly 5 scenes"):
-            validate_video_plan(plan)
+def test_invalid_motion_prompt_too_long():
+    plan_dict = _make_valid_plan_dict()
+    plan_dict["motion_prompt"] = "A" * 5001
 
-    def test_five_scenes(self):
-        plan = VideoPlan.model_validate(_make_valid_plan(5))
-        validate_video_plan(plan)
-        assert len(plan.scenes) == 5
-
-    def test_default_fields(self):
-        plan = VideoPlan.model_validate(_make_valid_plan())
-        assert plan.width == 1080
-        assert plan.height == 1920
-        assert plan.fps == 30
-        assert plan.target_duration_ms == 30000
-        assert plan.voice == "en-US-ChristopherNeural"
-        assert plan.aspect_ratio == "9:16"
-
-    def test_visual_background_is_supported(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["visual"]["background"] = "midnight-blue"
-        plan = VideoPlan.model_validate(data)
-        assert plan.scenes[0].visual.background == "midnight-blue"
-
-    def test_narration_is_padded_to_target_duration(self):
-        # pyrefly: ignore [missing-import]
-        from src.media.tts_generator import NarrationGenerator
-
-        short_audio = np.zeros(24000, dtype=np.float32)
-        padded = NarrationGenerator._pad_audio_to_duration(short_audio, 30000, 24000)
-
-        assert len(padded) == 720000
-        assert padded.shape[0] == 720000
-
-    def test_scene_duration_in_range(self):
-        """Each scene in the 5-scene fixture is 6 s — within 4–10 s."""
-        plan = VideoPlan.model_validate(_make_valid_plan())
-        for scene in plan.scenes:
-            duration = scene.end_ms - scene.start_ms
-            assert 4000 <= duration <= 10000
-
-    def test_on_screen_text_word_count(self):
-        plan = VideoPlan.model_validate(_make_valid_plan())
-        for scene in plan.scenes:
-            words = len(scene.on_screen_text.strip().split())
-            assert 2 <= words <= 5
+    with pytest.raises(Exception):
+        VideoPlan.model_validate(plan_dict)
 
 
-# ── Gap / Overlap ─────────────────────────────────────────────────────────────
+def test_empty_fields_raise_error():
+    plan_dict = _make_valid_plan_dict()
+    plan_dict["hook"] = "   "
 
-
-class TestGapOverlap:
-    def test_gap_between_scenes(self):
-        data = _make_valid_plan()
-        # Introduce a 500 ms gap after scene-01
-        data["scenes"][1]["start_ms"] = 6500  # was 6000
-        plan = VideoPlan.model_validate(data)
-        with pytest.raises(ValueError, match="expected start_ms=6000"):
-            validate_video_plan(plan)
-
-    def test_overlap_between_scenes(self):
-        data = _make_valid_plan()
-        # scene-02 starts 1 s early → overlaps scene-01
-        data["scenes"][1]["start_ms"] = 5000  # was 6000
-        data["scenes"][1]["end_ms"] = 12000
-        plan = VideoPlan.model_validate(data)
-        with pytest.raises(ValueError, match="expected start_ms=6000"):
-            validate_video_plan(plan)
-
-
-# ── Non-30-second total ───────────────────────────────────────────────────────
-
-
-class TestDuration:
-    def test_total_not_30_seconds(self):
-        data = _make_valid_plan()
-        # Last scene ends at 29 000 instead of 30 000
-        data["scenes"][-1]["end_ms"] = 29000
-        plan = VideoPlan.model_validate(data)
-        with pytest.raises(ValueError, match="30000"):
-            validate_video_plan(plan)
-
-    def test_first_scene_not_at_zero(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["start_ms"] = 500
-        plan = VideoPlan.model_validate(data)
-        with pytest.raises(ValueError, match="start at 0"):
-            validate_video_plan(plan)
-
-    def test_too_few_scenes(self):
-        """validate_video_plan() must catch fewer than 5 scenes."""
-        data = _make_valid_plan()
-        data["scenes"] = data["scenes"][:3]
-        data["scenes"][-1]["end_ms"] = 18000
-        plan = VideoPlan.model_validate(data)
-        with pytest.raises(ValueError, match="exactly 5 scenes"):
-            validate_video_plan(plan)
-
-
-# ── Legacy fields ─────────────────────────────────────────────────────────────
-
-
-class TestLegacyFields:
-    @pytest.mark.parametrize("field", [
-        "veo_prompt",
-        "extension_prompt",
-        "video_prompt",
-        "reference_image_urls",
-        "shots",
-        "production",
-    ])
-    def test_rejects_legacy_field(self, field: str):
-        data = _make_valid_plan()
-        data[field] = "should be rejected"
-        with pytest.raises(Exception, match=field):
-            VideoPlan.model_validate(data)
-
-
-# ── Scene-level field validation ──────────────────────────────────────────────
-
-
-class TestSceneValidation:
-    def test_on_screen_text_too_short(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["on_screen_text"] = "API"  # 1 word
-        with pytest.raises(ValueError, match="2–5"):
-            VideoPlan.model_validate(data)
-
-    def test_on_screen_text_too_long(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["on_screen_text"] = "one two three four five six"  # 6 words
-        with pytest.raises(ValueError, match="2–5"):
-            VideoPlan.model_validate(data)
-
-    def test_scene_duration_too_short(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["end_ms"] = 2000  # 2 s — below 4 s minimum
-        with pytest.raises(ValueError, match="4–10 second"):
-            VideoPlan.model_validate(data)
-
-    def test_scene_duration_too_long(self):
-        data = _make_valid_plan()
-        data["scenes"][0]["end_ms"] = 20000  # 20 s — above 10 s maximum
-        with pytest.raises(ValueError, match="4–10 second"):
-            VideoPlan.model_validate(data)
-
-
-def test_invalid_diagram_template_is_normalized_to_kind_diagram():
-    plan = {
-        "schema_version": "1.0",
-        "topic": "How APIs work",
-        "youtube": _make_youtube(),
-        "scenes": [],
-    }
-
-    roles = ["hook", "problem", "explanation", "mechanism", "key insight"]
-    boundaries = [0, 6000, 12000, 18000, 24000, 30000]
-
-    for i in range(5):
-        plan["scenes"].append({
-            "id": f"scene-0{i+1}",
-            "story_role": roles[i],
-            "start_ms": boundaries[i],
-            "end_ms": boundaries[i+1],
-            "narration": "The client sends a request to the API.",
-            "on_screen_text": "REQUEST SENT",
-            "visual": {
-                "kind": "comparison",
-                "query": "phone sends request to API gateway",
-                "template": "comparison",
-                "data": {"nodes": [{"id": "a", "label": "Client", "icon": "smartphone"}], "edges": []},
-            },
-            "event": {
-                "type": "flow",
-                "action": "send",
-                "from": "a",
-                "to": "b",
-                "label": "request",
-                "result": "success",
-            },
-            "transition": "cut",
-        })
-
-    normalized = VideoScriptGeneratorAgent._repair_invalid_visual_schema(plan)
-    assert normalized["scenes"][0]["visual"]["kind"] == "diagram"
-    assert normalized["scenes"][0]["visual"]["template"] == "comparison"
-
-    validated = VideoPlan.model_validate(normalized)
-    validate_video_plan(validated)
+    with pytest.raises(Exception):
+        VideoPlan.model_validate(plan_dict)

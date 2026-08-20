@@ -1,14 +1,7 @@
 """
 src/model/service/prompt_agent.py
 
-Calls NVIDIA Nemotron (via OpenRouter) and returns a validated VideoPlan.
-
-Changes from previous version:
-  - Returns typed VideoPlan, not an untyped dict.
-  - Inverted / confusing DEVMODE cache logic removed.
-  - Supports --use-cached-plan <path> via load_plan_from_file().
-  - Saves validated plan to data/runs/<run-id>/plan.json (caller supplies run_dir).
-  - No reference to KIE_API_KEY or any text-to-video service.
+Calls OpenRouter model and returns a validated VideoPlan for Grok Imagine Text-To-Video.
 """
 
 from __future__ import annotations
@@ -20,16 +13,13 @@ from pathlib import Path
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
 
-# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import VideoPlan, validate_video_plan
-# pyrefly: ignore [missing-import]
-from src.utility.load_envs import load_all_env
-# pyrefly: ignore [missing-import]
+from src.utility.file_manipuator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 
 class VideoScriptGeneratorAgent:
-    """Generates and validates a VideoPlan from a user topic via NVIDIA Nemotron."""
+    """Generates and validates a VideoPlan from a user topic via OpenRouter LLM."""
 
     def __init__(
         self,
@@ -47,7 +37,6 @@ class VideoScriptGeneratorAgent:
 
         prompts_dir = Path(__file__).resolve().parents[3] / "prompts"
         self.system_prompt = self._load_prompt(prompts_dir / "script_video_prompt.md")
-
 
     def generate(self, run_dir: Path) -> VideoPlan:
         """Call the LLM, validate the result, save plan.json, and return it.
@@ -73,7 +62,7 @@ class VideoScriptGeneratorAgent:
         plan = self._parse_and_validate(raw)
 
         plan_path = run_dir / "plan.json"
-        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        FileManipulator.write_text(plan_path, plan.model_dump_json(indent=2))
         self.logger.info("[prompt_agent] plan.json saved → %s", plan_path)
 
         return plan
@@ -88,11 +77,10 @@ class VideoScriptGeneratorAgent:
         Returns:
             Validated VideoPlan.
         """
-        text = Path(path).read_text(encoding="utf-8")
+        text = FileManipulator.read_text(path)
         plan = VideoPlan.model_validate_json(text)
         validate_video_plan(plan)
         return plan
-
 
     def _invoke_llm(self) -> str:
         """Call the OpenRouter model and return the raw content string."""
@@ -119,13 +107,11 @@ class VideoScriptGeneratorAgent:
         Raises:
             ValueError: On JSON parse failure or contract validation failure.
         """
-        # Strip ```json ... ``` or ``` ... ``` fences if present.
         cleaned = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
         cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE).strip()
 
         try:
             payload = json.loads(cleaned)
-            payload = self._repair_invalid_visual_schema(payload)
             plan = VideoPlan.model_validate(payload)
         except Exception as exc:
             self.logger.error(
@@ -142,49 +128,13 @@ class VideoScriptGeneratorAgent:
             raise
 
         self.logger.info(
-            "[prompt_agent] VideoPlan validated — %d scenes, topic: %s",
-            len(plan.scenes),
+            "[prompt_agent] VideoPlan validated for topic: %s",
             plan.topic,
         )
         return plan
 
     @staticmethod
-    def _repair_invalid_visual_schema(plan: dict) -> dict:
-        """Normalize mistaken diagram template names that the model emitted as kind values."""
-        valid_kinds = {"diagram", "image", "stock_video", "screen_capture"}
-        diagram_templates = {
-            "request-flow",
-            "architecture-layers",
-            "sequence",
-            "comparison",
-            "timeline",
-            "concept-card",
-            "metric-chart",
-        }
-
-        for scene in plan.get("scenes", []):
-            visual = scene.get("visual")
-            if not isinstance(visual, dict):
-                continue
-
-            kind = visual.get("kind")
-            template = visual.get("template")
-            if kind in valid_kinds:
-                continue
-
-            if kind in diagram_templates:
-                visual["kind"] = "diagram"
-                visual.setdefault("template", kind)
-                continue
-
-            if isinstance(template, str) and template in diagram_templates:
-                visual["kind"] = "diagram"
-                continue
-
-        return plan
-
-    @staticmethod
     def _load_prompt(path: Path) -> str:
-        if not path.exists():
+        if not FileManipulator.exists(path):
             raise FileNotFoundError(f"Prompt file not found: {path}")
-        return path.read_text(encoding="utf-8")
+        return FileManipulator.read_text(path)

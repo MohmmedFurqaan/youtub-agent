@@ -124,12 +124,14 @@ def validate_captions(
         )
 
 
+from src.utility.file_manipuator import FileManipulator
+
+
 def save_captions(captions: list[CaptionRecord], path: Path) -> None:
     """Serialise caption list to a JSON file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(captions, indent=2, ensure_ascii=False), encoding="utf-8")
+    FileManipulator.write_json(path, captions, indent=2, ensure_ascii=False)
 
 
 def load_captions(path: Path) -> list[CaptionRecord]:
     """Load caption list from a JSON file."""
-    return json.loads(path.read_text(encoding="utf-8"))
+    return FileManipulator.read_json(path, default=[])

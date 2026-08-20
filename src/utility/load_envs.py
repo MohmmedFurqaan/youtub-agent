@@ -20,7 +20,7 @@ def _required_env(var_name: str) -> str:
     return value
 
 
-def load_all_env() -> tuple[str, str, str, str, dict] | RuntimeError:
+def load_all_env() -> tuple[str, str, str, dict] | RuntimeError:
     """Load all required environment variables.
 
     Returns:
@@ -34,9 +34,8 @@ def load_all_env() -> tuple[str, str, str, str, dict] | RuntimeError:
     openrouter_api_key = _required_env("OPENROUTER_API_KEY")
     openrouter_model_name = _required_env("OPENROUTER_MODEL_NAME")
 
-    # Hugging face env's
-    hugging_face_model = _required_env('HF_TTS_MODEL')
-    hugging_face_key = _required_env('HF_API_TOKEN')
+    # KIE API key for Grok Imagine Text-To-Video
+    kie_api_key = _required_env("KIE_API_KEY")
 
     # configuration of the youtube...
     youtube_config = {
@@ -60,8 +59,5 @@ def load_all_env() -> tuple[str, str, str, str, dict] | RuntimeError:
         }
     }
 
-    if not openrouter_api_key and openrouter_model_name and youtube_config and hugging_face_key:
-        raise RuntimeError('Kindly add the all KEYS given in the .env.example !')
-    else:
-        return openrouter_api_key, openrouter_model_name, hugging_face_key, hugging_face_model , youtube_config
+    return openrouter_api_key, openrouter_model_name, kie_api_key, youtube_config
 
