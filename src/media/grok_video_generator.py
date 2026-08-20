@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 import requests
 
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()

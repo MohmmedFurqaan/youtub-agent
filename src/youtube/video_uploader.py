@@ -24,7 +24,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import google.oauth2.credentials
 
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()

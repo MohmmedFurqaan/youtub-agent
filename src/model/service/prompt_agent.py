@@ -14,7 +14,7 @@ from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
 
 from src.contracts.video_plan import VideoPlan, validate_video_plan
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 

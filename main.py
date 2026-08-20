@@ -15,12 +15,9 @@ Usage:
     uv run python main.py upload --run-id <id> --publish
 
 Pipeline:
-    NVIDIA Nemotron (OpenRouter) → VideoPlan → Asset Resolver → TTS
-    → Remotion render → quality checks → YouTube upload (separate command)
-
-This project does NOT use text-to-video generation.
-Remotion composes licensed/static visual assets, programmatic diagrams,
-narration, captions, and overlays into the final MP4.
+    OpenRouter LLM → VideoPlan → Edge-TTS (voiceover + SRT)
+    → Grok Imagine AI Video (KIE.ai) → FFmpeg Compositor → Quality Checks
+    → YouTube upload (separate command)
 """
 
 from __future__ import annotations

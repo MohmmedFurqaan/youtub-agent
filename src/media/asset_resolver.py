@@ -29,7 +29,7 @@ import requests
 
 # pyrefly: ignore [missing-import]
 from src.contracts.video_plan import Scene
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()

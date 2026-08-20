@@ -12,12 +12,12 @@ def test_tts_generator_empty_text(tmp_path):
         generator.generate_narration("  ", tmp_path / "out.mp3")
 
 
-@patch.object(TTSGenerator, "_synthesize")
+@patch.object(TTSGenerator, "_synthesize_with_subtitles")
 def test_tts_generator_success(mock_synth, tmp_path):
     output_mp3 = tmp_path / "audio" / "narration.mp3"
     generator = TTSGenerator()
 
-    async def dummy_synth(text, path):
+    async def dummy_synth(text, output_audio_path, output_srt_path):
         output_mp3.parent.mkdir(parents=True, exist_ok=True)
         output_mp3.write_bytes(b"dummy mp3 data")
 

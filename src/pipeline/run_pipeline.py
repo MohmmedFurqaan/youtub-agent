@@ -26,7 +26,7 @@ from src.media.grok_video_generator import GrokVideoGenerator
 from src.media.tts_generator import TTSGenerator
 from src.model.service.prompt_agent import VideoScriptGeneratorAgent
 from src.pipeline.quality_checks import QualityChecker
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()

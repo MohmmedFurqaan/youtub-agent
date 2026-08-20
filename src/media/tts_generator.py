@@ -12,7 +12,7 @@ from pathlib import Path
 
 import edge_tts
 
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()
@@ -21,7 +21,7 @@ logger = setup_logging()
 class TTSGenerator:
     """TTS voiceover and subtitle generator using edge-tts."""
 
-    DEFAULT_VOICE = "en-US-ChristopherNeural"
+    DEFAULT_VOICE = "en-GB-MaisieNeural"
 
     def __init__(self, voice: str = DEFAULT_VOICE) -> None:
         self.voice = voice

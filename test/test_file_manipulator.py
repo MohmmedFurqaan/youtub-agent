@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from src.utility.file_manipuator import FileManipulator, SaveLlmResponse
+from src.utility.file_manipulator import FileManipulator, SaveLlmResponse
 
 
 def test_get_project_root():

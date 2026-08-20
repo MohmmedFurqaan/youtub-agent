@@ -15,9 +15,9 @@ Caption record format (matches @remotion/captions Caption type):
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TypedDict
+from src.utility.file_manipulator import FileManipulator
 
 
 class CaptionRecord(TypedDict):
@@ -124,7 +124,6 @@ def validate_captions(
         )
 
 
-from src.utility.file_manipuator import FileManipulator
 
 
 def save_captions(captions: list[CaptionRecord], path: Path) -> None:

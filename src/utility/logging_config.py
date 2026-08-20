@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.utility.file_manipuator import FileManipulator
+from src.utility.file_manipulator import FileManipulator
 
 def setup_logging(name: str = __name__) -> logging.Logger:
     """
