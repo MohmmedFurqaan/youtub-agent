@@ -90,7 +90,10 @@ class VideoScriptGeneratorAgent:
         )
         messages = [
             SystemMessage(self.system_prompt.strip()),
-            HumanMessage(f'prepare a video-plan on : {self.topic.strip()}')
+            HumanMessage(
+                f"Create a natural, human-written 30-second YouTube Short VideoPlan JSON for the topic: '{self.topic.strip()}'. "
+                "Ensure the voice script sounds completely human, conversational, and strictly avoids AI clichés."
+            ),
         ]
         response = model.invoke(messages)
         return str(response.content).strip()

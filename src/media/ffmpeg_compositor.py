@@ -73,9 +73,11 @@ class FFmpegCompositor:
             cmd = [
                 ffmpeg_bin,
                 "-y",
-                "-i", str(video_path.resolve()),
-                "-i", str(audio_path.resolve()),
-                "-vf", sub_filter,
+                "-i", str(video_path.resolve()),  # Input 0: Raw video
+                "-i", str(audio_path.resolve()),  # Input 1: Edge-TTS audio
+                "-map", "0:v:0",                  # Strip any original video audio, use only video track
+                "-map", "1:a:0",                  # Use Edge-TTS narration as sole audio track
+                "-vf", sub_filter,                # Burn SRT subtitles onto video
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
@@ -86,8 +88,10 @@ class FFmpegCompositor:
             cmd = [
                 ffmpeg_bin,
                 "-y",
-                "-i", str(video_path.resolve()),
-                "-i", str(audio_path.resolve()),
+                "-i", str(video_path.resolve()),  # Input 0: Raw video
+                "-i", str(audio_path.resolve()),  # Input 1: Edge-TTS audio
+                "-map", "0:v:0",                  # Strip any original video audio, use only video track
+                "-map", "1:a:0",                  # Use Edge-TTS narration as sole audio track
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-shortest",

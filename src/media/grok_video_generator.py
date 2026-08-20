@@ -43,8 +43,8 @@ class GrokVideoGenerator:
         resolution: str = "480p",
         mode: str = "normal",
         nsfw_checker: bool = True,
-        poll_interval: int = 5,
-        timeout: int = 600,
+        poll_interval: int | None = None,
+        timeout: int | None = None,
     ) -> Path:
         """Create task, poll until completed, download MP4, and save to run_dir/final.mp4.
 
@@ -56,12 +56,19 @@ class GrokVideoGenerator:
             resolution: Resolution string ("480p" default).
             mode: Generation mode ("normal", "fun", "spicy").
             nsfw_checker: Boolean flag for NSFW checker.
-            poll_interval: Seconds between status polling requests.
-            timeout: Maximum seconds to wait before timing out.
+            poll_interval: Seconds between status polling requests (defaults to GROK_POLL_INTERVAL env or 5).
+            timeout: Maximum seconds to wait before timing out (defaults to GROK_POLL_TIMEOUT env or 600).
 
         Returns:
             Path to the downloaded final.mp4 file.
         """
+        import os
+
+        if poll_interval is None:
+            poll_interval = int(os.getenv("GROK_POLL_INTERVAL", "5"))
+        if timeout is None:
+            timeout = int(os.getenv("GROK_POLL_TIMEOUT", "600"))
+
         cleaned_prompt = prompt.strip()
         if not cleaned_prompt:
             raise ValueError("Prompt for Grok Imagine video generator cannot be empty.")

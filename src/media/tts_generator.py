@@ -21,10 +21,11 @@ logger = setup_logging()
 class TTSGenerator:
     """TTS voiceover and subtitle generator using edge-tts."""
 
-    DEFAULT_VOICE = "en-GB-MaisieNeural"
+    DEFAULT_VOICE = "en-US-ChristopherNeural"
 
-    def __init__(self, voice: str = DEFAULT_VOICE) -> None:
-        self.voice = voice
+    def __init__(self, voice: str | None = None) -> None:
+        import os
+        self.voice = voice or os.getenv("EDGE_TTS_VOICE", self.DEFAULT_VOICE)
 
     def generate_narration(self, text: str, output_path: Path) -> Path:
         """Generate audio file (mp3) from text.
