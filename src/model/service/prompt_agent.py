@@ -92,7 +92,8 @@ class VideoScriptGeneratorAgent:
             SystemMessage(self.system_prompt.strip()),
             HumanMessage(
                 f"Create a natural, human-written 30-second YouTube Short VideoPlan JSON for the topic: '{self.topic.strip()}'. "
-                "Ensure the voice script sounds completely human, conversational, and strictly avoids AI clichés."
+                "Ensure the voice script sounds completely human, conversational, and strictly avoids AI clichés. "
+                "CRITICAL: The motion_prompt MUST be perfectly synchronized with the voice_script, visually depicting the exact technical concepts, mechanisms, and subjects spoken in the audio narration."
             ),
         ]
         response = model.invoke(messages)

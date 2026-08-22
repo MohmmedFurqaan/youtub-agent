@@ -73,6 +73,7 @@ class FFmpegCompositor:
             cmd = [
                 ffmpeg_bin,
                 "-y",
+                "-stream_loop", "-1",             # Loop raw video infinitely until audio ends
                 "-i", str(video_path.resolve()),  # Input 0: Raw video
                 "-i", str(audio_path.resolve()),  # Input 1: Edge-TTS audio
                 "-map", "0:v:0",                  # Strip any original video audio, use only video track
@@ -88,11 +89,13 @@ class FFmpegCompositor:
             cmd = [
                 ffmpeg_bin,
                 "-y",
+                "-stream_loop", "-1",             # Loop raw video infinitely until audio ends
                 "-i", str(video_path.resolve()),  # Input 0: Raw video
                 "-i", str(audio_path.resolve()),  # Input 1: Edge-TTS audio
                 "-map", "0:v:0",                  # Strip any original video audio, use only video track
                 "-map", "1:a:0",                  # Use Edge-TTS narration as sole audio track
-                "-c:v", "copy",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-shortest",
                 str(temp_output.resolve()),

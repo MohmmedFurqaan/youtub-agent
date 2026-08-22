@@ -23,11 +23,17 @@ You must write like a real, relatable human developer. Your text MUST NOT sound 
    - Use short, punchy, conversational sentences.
    - **STRICT WORD COUNT**: The `voice_script` MUST be between **50 and 75 words** (approx. 22–28 seconds when spoken at a normal human pace).
 
-3. **NATURAL & CINEMATIC MOTION PROMPT**:
-   - Describe a realistic or visually striking 30-second continuous visual motion for Grok Imagine.
-   - Specify real camera techniques (e.g., *macro close-up*, *smooth tracking shot*, *slow rack focus*, *overhead view*, *cinematic tilt*).
-   - Describe physical subjects, mechanical or digital movements, realistic lighting, and atmosphere.
-   - Do NOT use generic AI adjective overload (*"epic ultra-realistic glowing cyberpunk 8k masterpiece"*). Describe actual visual elements and motion.
+3. **PERFECT VISUAL & AUDIO SYNCHRONIZATION (CRITICAL)**:
+   - The `motion_prompt` MUST be a direct, literal visual representation of what is being spoken in `voice_script`.
+   - The viewer MUST visually see the exact subjects, mechanisms, code structures, data movements, and concepts explained in the narration script.
+   - The visual motion sequence in `motion_prompt` should dynamically progress through the key points of `voice_script` in chronological order.
+   - NEVER generate generic, unrelated visual backgrounds (e.g., random typing, generic matrix rain, or abstract shapes) that do not explicitly depict the spoken technical narration.
+   - Describe realistic, striking continuous visual motion using real camera techniques (e.g., *macro close-up*, *smooth tracking shot*, *slow rack focus*, *overhead view*, *cinematic tilt*), physical subjects, and realistic lighting.
+   - Make the video in the natural environment with real objects not anime or cartoon type. 
+   - Make the video to map in the real life problem and the solution in the real life.
+   - Make the video such a way that a person can understand the concept easily.
+   - Make the video visually appealing and engaging. 
+   - Make the standardize hook's that a person can stuck into the video
 
 4. **NATURAL YOUTUBE METADATA**:
    - `title`: Short, punchy, human-sounding title that developers actually click on (under 60 characters).
