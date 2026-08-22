@@ -1,165 +1,152 @@
-# yt-agent
+# YouTube Agent Studio
 
-Automated YouTube Shorts generator powered by NVIDIA Nemotron and Remotion.
-
-> **This project does not use text-to-video generation.**
-> Remotion composes licensed/static visual assets, programmatic diagrams,
-> narration, captions, and overlays into the final MP4.
+An autonomous YouTube Shorts generator and publishing suite powered by **OpenRouter LLMs**, **Grok Imagine AI Video (KIE.ai)**, **Edge-TTS**, **FFmpeg Compositor**, **FastAPI**, and a **2D Flat React + shadcn/ui Web Application**.
 
 ---
 
-## Architecture
+## 🚀 Features
+
+- **Full-Stack Web Interface**: Modern, responsive 2D flat Studio UI built with React, Vite, Tailwind CSS v4, and **shadcn/ui** components.
+- **Real-Time Progress Monitor**: Live Server-Sent Events (SSE) log stream tracking 5 pipeline stages:
+  1. *Script & VideoPlan Generation*
+  2. *Grok Imagine 30s Vertical AI Video Generation*
+  3. *Edge-TTS Narration & SRT Subtitle Synthesis*
+  4. *FFmpeg Audio/Video Composition & Subtitle Burning*
+  5. *Automated Quality Gate Checks*
+- **Media Library & Inspector**: Preview `final.mp4` with embedded HTML5 player, listen to narration audio, view subtitles, edit `plan.json` directly, and inspect quality metrics.
+- **YouTube Publishing Suite**: Validate quality gate compliance and publish videos directly to YouTube (Public or Private mode).
+- **CLI & REST API Support**: Full feature parity between Web UI and terminal CLI (`main.py`).
+
+---
+
+## 📐 Architecture
 
 ```
-Topic
-  → NVIDIA Nemotron (OpenRouter)  — generates VideoPlan JSON
-  → Asset Resolver                — diagrams (SVG) or still images
-  → TTS (edge-tts)               — one narration.mp3 + captions.json
-  → Remotion                     — renders 1080×1920 @30fps MP4
-  → Quality checks (ffprobe)     — validates before upload is allowed
-  → YouTube upload               — explicit separate command, private by default
+Topic Prompt
+  → OpenRouter LLM (Gemini / Nemotron)   — generates VideoPlan JSON
+  → Grok Imagine AI Video (KIE.ai)        — generates 30s 9:16 vertical video
+  → Edge-TTS                             — synthesizes narration audio + SRT subtitles
+  → FFmpeg Compositor                    — merges video, audio & burns subtitles
+  → Quality Gate Checks                   — validates audio/video sync & resolution
+  → YouTube Data API                      — uploads video (Private by default)
 ```
 
 ---
 
-## Setup
+## ⚙️ Quick Start & Setup
 
-### 1. Install Python dependencies
+### 1. Install Python Dependencies
 
 ```bash
 uv sync
 ```
 
-### 2. Install Node dependencies (Remotion renderer)
+### 2. Install Frontend Dependencies & Build Web UI
 
 ```bash
-cd video-renderer && npm install && cd ..
+cd web
+npm install
+npm run build
+cd ..
 ```
 
-### 3. Configure environment
+### 3. Environment Configuration
 
-Copy `env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and fill in your API credentials:
 
 ```bash
-cp env.example .env
+cp .env.example .env
 ```
 
-Required variables:
+Key environment variables:
 
 | Variable | Description |
 |---|---|
 | `OPENROUTER_API_KEY` | Your OpenRouter API key |
-| `OPENROUTER_MODEL_NAME` | e.g. `nvidia/nemotron-3.5-lightning:free` |
-| `YOUTUBE_CLIENT_ID` | YouTube OAuth client ID |
-| `YOUTUBE_CLIENT_SECRET` | YouTube OAuth client secret |
-| `YOUTUBE_PROJECT_ID` | Google Cloud project ID |
+| `OPENROUTER_MODEL_NAME` | e.g. `google/gemini-2.5-flash` |
+| `KIE_API_KEY` | KIE.ai API key for Grok Imagine Text-to-Video |
+| `YOUTUBE_CLIENT_ID` | YouTube OAuth Client ID |
+| `YOUTUBE_CLIENT_SECRET` | YouTube OAuth Client Secret |
+| `YOUTUBE_PROJECT_ID` | Google Cloud Project ID |
 
-Optional:
+---
 
-| Variable | Default | Description |
-|---|---|---|
-| `USE_POLLINATIONS_STILL` | `false` | Enable Pollinations.ai still-image backgrounds |
+## 🖥️ Running the Web Application
 
-### 4. FFmpeg
-
-The quality checker requires `ffprobe` (included with FFmpeg):
+Launch the FastAPI backend and serve the Web UI:
 
 ```bash
-# Ubuntu / Debian
-sudo apt install ffmpeg
+uv run python main.py web --port 8000
+```
+
+Open your browser at **`http://localhost:8000`**!
+
+### Frontend Development Mode (Hot Reloading)
+
+To work on the React UI with hot reload:
+
+```bash
+# Terminal 1 (Backend API)
+uv run python main.py web --port 8000
+
+# Terminal 2 (Vite Dev Server)
+cd web && npm run dev
+```
+
+Open `http://localhost:5173`.
+
+---
+
+## 💻 CLI Usage
+
+You can also run pipeline actions directly from the command line:
+
+### Generate a new video from topic
+
+```bash
+uv run python main.py create --topic "How an API request works under the hood"
+```
+
+### Use a cached plan (skips LLM call)
+
+```bash
+uv run python main.py create --topic "..." --use-cached-plan data/runs/<run_id>/plan.json
+```
+
+### Upload a run to YouTube
+
+```bash
+# Private Upload (default)
+uv run python main.py upload --run-id <run_id>
+
+# Public Upload
+uv run python main.py upload --run-id <run_id> --publish
 ```
 
 ---
 
-## Usage
+## 🧪 Testing
 
-### Generate a video
-
-```bash
-uv run python main.py create --topic "How an API request works"
-```
-
-This runs the full pipeline and prints a **Run ID** when complete.
-
-### Re-use a cached plan (skip LLM call)
+Run the automated test suite with pytest:
 
 ```bash
-uv run python main.py create --topic "..." --use-cached-plan data/runs/<id>/plan.json
-```
-
-### Upload to YouTube (private by default)
-
-```bash
-uv run python main.py upload --run-id <id>
-```
-
-### Upload and make public
-
-```bash
-uv run python main.py upload --run-id <id> --publish
-```
-
-Upload is always a **separate, explicit command** so a render failure cannot
-accidentally make a video public.
-
----
-
-## Preview in Remotion Studio
-
-```bash
-cd video-renderer && npm run dev
+uv run pytest
 ```
 
 ---
 
-## Run tests
+## 📁 Run Directory Structure
 
-```bash
-uv run python -m pytest test/ -v
-```
-
----
-
-## Run directory layout
-
-Each video generation produces an immutable run directory:
+Each execution creates an isolated run directory in `data/runs/<run_id>`:
 
 ```
 data/runs/<run-id>/
-  plan.json          — validated VideoPlan (NVIDIA output)
-  props.json         — Remotion composition input
-  assets/
-    scene-01/
-      asset.svg      — diagram or image
-      asset.json     — manifest (source, license, attribution)
-    scene-02/ …
-  audio/
-    narration.mp3    — single TTS narration for the full video
-  captions.json      — Remotion-compatible word timestamps
-  final.mp4          — rendered output
-  run.json           — pipeline status, paths, errors
-  youtube.json       — video ID and upload timestamp (after upload)
+  ├── plan.json          — Video script & motion prompts
+  ├── raw/
+  │   └── final.mp4      — Raw 30s AI video from Grok Imagine
+  ├── audio/
+  │   ├── narration.mp3  — TTS voiceover audio
+  │   └── captions.srt   — SRT subtitle captions
+  ├── final.mp4          — Rendered final output (video + audio + burned captions)
+  └── run.json           — Execution status, timestamps, and log paths
 ```
-
----
-
-## Visual asset strategy
-
-| Scene `visual.kind` | Resolver | External API? |
-|---|---|---|
-| `diagram` | `DiagramResolver` (SVG text+icon) | ❌ None |
-| `image` | `StillImageResolver` (Pollinations) | ⚙️ Only if `USE_POLLINATIONS_STILL=true` |
-| `stock_video` | `LocalAssetResolver` (`data/library/`) | ❌ None |
-| `screen_capture` | `LocalAssetResolver` (`data/library/`) | ❌ None |
-
----
-
-## Removed
-
-The following text-to-video API integrations have been removed:
-
-- Seedance 2.5 (`KIE_API_KEY`)
-- Veo 3.1
-- Grok / api.kie.ai
-
-The `KIE_API_KEY` environment variable is no longer used or loaded.

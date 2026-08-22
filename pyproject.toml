@@ -13,6 +13,9 @@ dependencies = [
     "langchain-openrouter>=0.2.7",
     "pydantic>=2",
     "python-dotenv>=1.2.2",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "sse-starlette>=2.0.0",
     "requests>=2.34.2",
 ]
 

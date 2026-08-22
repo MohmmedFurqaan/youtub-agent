@@ -40,3 +40,8 @@ token.json
 /video-renderer/verif_frames_fb1/
 /video-renderer/verif_frames_fb1_timeline/
 /video-renderer/verif_frames_fb1_timeline_v2/
+
+.agents
+skills-lock.json 
+web/node_modules
+web/dist

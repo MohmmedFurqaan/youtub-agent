@@ -109,6 +109,13 @@ def cmd_upload(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_web(args: argparse.Namespace) -> int:
+    """Web command: launch FastAPI web server."""
+    from src.web.server import start_web_server
+    start_web_server(host=args.host, port=args.port)
+    return 0
+
+
 # ── Argument parser ───────────────────────────────────────────────────────────
 
 
@@ -147,6 +154,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Make the video public (default: private).",
     )
 
+    # web
+    web_p = sub.add_parser("web", help="Launch the Web Application server.")
+    web_p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind (default: 127.0.0.1)",
+    )
+    web_p.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port number to listen on (default: 8000)",
+    )
+
     return parser
 
 
@@ -158,3 +179,5 @@ if __name__ == "__main__":
         sys.exit(cmd_create(args))
     elif args.command == "upload":
         sys.exit(cmd_upload(args))
+    elif args.command == "web":
+        sys.exit(cmd_web(args))
