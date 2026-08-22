@@ -15,12 +15,9 @@ Usage:
     uv run python main.py upload --run-id <id> --publish
 
 Pipeline:
-    NVIDIA Nemotron (OpenRouter) → VideoPlan → Asset Resolver → TTS
-    → Remotion render → quality checks → YouTube upload (separate command)
-
-This project does NOT use text-to-video generation.
-Remotion composes licensed/static visual assets, programmatic diagrams,
-narration, captions, and overlays into the final MP4.
+    OpenRouter LLM → VideoPlan → Edge-TTS (voiceover + SRT)
+    → Grok Imagine AI Video (KIE.ai) → FFmpeg Compositor → Quality Checks
+    → YouTube upload (separate command)
 """
 
 from __future__ import annotations
@@ -29,17 +26,19 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.pipeline.quality_checks import assert_run_ready_to_upload, QualityCheckError
+from src.youtube.video_uploader import upload_video
 from src.utility.load_envs import load_all_env
 from src.utility.logging_config import setup_logging
+from src.pipeline.run_pipeline import RunPipeline
 
 logger = setup_logging()
-
+openrouter_api_key, openrouter_model_name, kie_api_key, youtube_config = load_all_env()
 
 def cmd_create(args: argparse.Namespace) -> int:
-    """Create command: generate plan → assets → TTS → render → quality check."""
-    from src.pipeline.run_pipeline import RunPipeline
-
-    OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, _ = load_all_env()
+    """Create command: generate script → Grok Imagine AI Video → quality check."""
+    
+    
 
     cached_plan = Path(args.use_cached_plan) if args.use_cached_plan else None
     if cached_plan and not cached_plan.exists():
@@ -48,22 +47,20 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     pipeline = RunPipeline(
         topic=args.topic,
-        open_router_model_name=OPENROUTER_MODEL_NAME,
+        open_router_model_name=openrouter_model_name,
+        kie_api_key=kie_api_key,
         cached_plan_path=cached_plan,
     )
 
-
-    print("yt-agent — Remotion Video Pipeline")
-
+    print("yt-agent — Grok Imagine AI Video Pipeline")
     print(f"  Topic:     {args.topic}")
     print(f"  Run ID:    {pipeline.run_id}")
     if cached_plan:
         print(f"  Plan:      {cached_plan} (cached)")
 
-
     try:
         mp4_path = pipeline.execute()
-        print("  ✓ Render complete")
+        print(" Video generation complete")
         print(f"  Output: {mp4_path}")
         print(f"  Run ID: {pipeline.run_id}")
         print("\nTo upload:")
@@ -79,11 +76,7 @@ def cmd_create(args: argparse.Namespace) -> int:
 
 def cmd_upload(args: argparse.Namespace) -> int:
     """Upload command: quality-check then upload an approved run to YouTube."""
-    from pathlib import Path as _Path
-    from src.pipeline.quality_checks import assert_run_ready_to_upload, QualityCheckError
-    from src.youtube.video_uploader import upload_video
-
-    _, _, youtube_config = load_all_env()
+    
 
     run_dir = Path("data") / "runs" / args.run_id
     if not run_dir.exists():
@@ -99,10 +92,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
     privacy = "public" if args.publish else "private"
 
-    print("=" * 60)
     print(f"  Uploading run: {args.run_id}")
     print(f"  Privacy:       {privacy.upper()}")
-    print("=" * 60)
 
     try:
         upload_video(
@@ -124,7 +115,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-agent",
-        description="YouTube Short generator — Remotion pipeline (no text-to-video APIs).",
+        description="YouTube Short generator — Remotion pipeline",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

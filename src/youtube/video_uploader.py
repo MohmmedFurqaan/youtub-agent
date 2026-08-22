@@ -24,13 +24,14 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import google.oauth2.credentials
 
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = FileManipulator.get_project_root()
 _TOKEN_PATH = _PROJECT_ROOT / "data" / "youtube_token.json"
 
 
@@ -38,15 +39,16 @@ def _get_credentials(youtube_config: dict):
     """Return valid OAuth credentials, refreshing from disk cache when possible."""
 
     # Try to load saved token
-    if _TOKEN_PATH.exists():
+    if FileManipulator.exists(_TOKEN_PATH):
         try:
-            info = json.loads(_TOKEN_PATH.read_text(encoding="utf-8"))
-            creds = google.oauth2.credentials.Credentials.from_authorized_user_info(
-                info, SCOPES
-            )
-            if creds and creds.valid:
-                logger.info("[uploader] Using cached OAuth token from %s", _TOKEN_PATH)
-                return creds
+            info = FileManipulator.read_json(_TOKEN_PATH)
+            if info:
+                creds = google.oauth2.credentials.Credentials.from_authorized_user_info(
+                    info, SCOPES
+                )
+                if creds and creds.valid:
+                    logger.info("[uploader] Using cached OAuth token from %s", _TOKEN_PATH)
+                    return creds
         except Exception as exc:
             logger.warning("[uploader] Could not load cached token: %s", exc)
 
@@ -56,8 +58,7 @@ def _get_credentials(youtube_config: dict):
     creds = flow.run_local_server(port=0)
 
     # Persist token for future runs
-    _TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+    FileManipulator.write_text(_TOKEN_PATH, creds.to_json())
     logger.info("[uploader] OAuth token saved → %s", _TOKEN_PATH)
 
     return creds
@@ -95,13 +96,13 @@ def upload_video(
     video_file = run_dir / "final.mp4"
     plan_file = run_dir / "plan.json"
 
-    if not video_file.exists():
+    if not FileManipulator.exists(video_file):
         raise FileNotFoundError(f"final.mp4 not found: {video_file}")
-    if not plan_file.exists():
+    if not FileManipulator.exists(plan_file):
         raise FileNotFoundError(f"plan.json not found: {plan_file}")
 
     # Read metadata from plan.json
-    plan_data = json.loads(plan_file.read_text(encoding="utf-8"))
+    plan_data = FileManipulator.read_json(plan_file, default={})
     yt = plan_data.get("youtube", {})
     title = yt.get("title", "AI Generated Short")
     description = yt.get("description", "")
@@ -147,6 +148,7 @@ def upload_video(
     )
 
     print("\nUploading…")
+    # pyrefly: ignore [missing-attribute]
     request = youtube.videos().insert(
         part="snippet,status",
         body=request_body,
@@ -170,7 +172,7 @@ def upload_video(
         "run_id": run_id,
     }
     youtube_path = run_dir / "youtube.json"
-    youtube_path.write_text(json.dumps(youtube_json, indent=2), encoding="utf-8")
+    FileManipulator.write_json(youtube_path, youtube_json, indent=2)
 
     print("\n" + "=" * 50)
     print("  UPLOAD SUCCESSFUL")

@@ -5,6 +5,8 @@ import logging
 import sys
 from pathlib import Path
 
+from src.utility.file_manipulator import FileManipulator
+
 def setup_logging(name: str = __name__) -> logging.Logger:
     """
     Configure and set up logging for the application.
@@ -17,14 +19,12 @@ def setup_logging(name: str = __name__) -> logging.Logger:
     """
 
     # Reconfigure stdout to use UTF-8 to handle the emojis sent by the user
+    # pyrefly: ignore [missing-attribute]
     sys.stdout.reconfigure(encoding='utf-8')
 
-    # Get project root directory
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
-    log_base = os.path.join(project_root, 'logs')
-    
-    # Create logs directory if it doesn't exist
-    pathlib.Path(log_base).mkdir(parents=True, exist_ok=True)
+    # Get project root directory & ensure logs directory exists
+    project_root = FileManipulator.get_project_root()
+    log_base = FileManipulator.ensure_dir(project_root / 'logs')
     
     # Create log file with current date types 
     current_date = time.strftime('%Y-%m-%d')

@@ -11,12 +11,6 @@ import os
 from dotenv import load_dotenv
 
 
-def _parse_bool(value: str | None) -> bool:
-    if value is None:
-        return False
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _required_env(var_name: str) -> str:
     value = os.getenv(var_name)
     if not value:
@@ -26,17 +20,24 @@ def _required_env(var_name: str) -> str:
     return value
 
 
-def load_all_env() -> tuple[str, str, dict]:
+def load_all_env() -> tuple[str, str, str, dict] | RuntimeError:
     """Load all required environment variables.
 
     Returns:
         Tuple of (OPENROUTER_API_KEY, OPENROUTER_MODEL_NAME, youtube_config).
+        RuntimeError when the key's are not found in the .env files.
     """
     load_dotenv()
 
+
+    # Open router env
     openrouter_api_key = _required_env("OPENROUTER_API_KEY")
     openrouter_model_name = _required_env("OPENROUTER_MODEL_NAME")
 
+    # KIE API key for Grok Imagine Text-To-Video
+    kie_api_key = _required_env("KIE_API_KEY")
+
+    # configuration of the youtube...
     youtube_config = {
         "installed": {
             "client_id": _required_env("YOUTUBE_CLIENT_ID"),
@@ -58,4 +59,5 @@ def load_all_env() -> tuple[str, str, dict]:
         }
     }
 
-    return openrouter_api_key, openrouter_model_name, youtube_config
+    return openrouter_api_key, openrouter_model_name, kie_api_key, youtube_config
+

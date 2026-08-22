@@ -27,7 +27,9 @@ from typing import NamedTuple
 
 import requests
 
+# pyrefly: ignore [missing-import]
 from src.contracts.video_plan import Scene
+from src.utility.file_manipulator import FileManipulator
 from src.utility.logging_config import setup_logging
 
 logger = setup_logging()
@@ -80,11 +82,10 @@ class BaseResolver(ABC):
             "local_path": str(resolved.local_path.relative_to(self.run_assets_dir.parent.parent)),
         }
         manifest_path = self._scene_dir_for_id(resolved.scene_id) / "asset.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        FileManipulator.write_json(manifest_path, manifest, indent=2)
 
     def _scene_dir_for_id(self, scene_id: str) -> Path:
         d = self.run_assets_dir / scene_id
-        d.mkdir(parents=True, exist_ok=True)
         return d
 
 
@@ -228,8 +229,8 @@ class DiagramResolver(BaseResolver):
         # manifest so the quality gate can still verify the scene asset directory.
         if getattr(scene.visual, "data", None) is not None or getattr(scene.visual, "template", None) is not None:
             logger.info("[diagram] native diagram payload present; keeping placeholder asset manifest for %s", scene.id)
-            if not dest.exists():
-                dest.write_text("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1080 1920'/>", encoding="utf-8")
+            if not FileManipulator.exists(dest):
+                FileManipulator.write_text(dest, "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1080 1920'/>")
             resolved = ResolvedAsset(
                 scene_id=scene.id,
                 local_path=dest,
@@ -240,9 +241,9 @@ class DiagramResolver(BaseResolver):
             self._write_manifest(resolved)
             return None
 
-        if not dest.exists():
+        if not FileManipulator.exists(dest):
             svg = _generate_diagram_svg(scene)
-            dest.write_text(svg, encoding="utf-8")
+            FileManipulator.write_text(dest, svg)
             logger.info("[diagram] SVG written → %s", dest)
         else:
             logger.info("[diagram] SVG already exists, skipping: %s", dest)
@@ -287,7 +288,7 @@ class LocalAssetResolver(BaseResolver):
             return None  # handled by DiagramResolver
 
         search_dir = self.library_dir / kind
-        if not search_dir.exists():
+        if not FileManipulator.dir_exists(search_dir):
             logger.warning("[local] Library folder not found: %s", search_dir)
             return None
 
@@ -312,11 +313,10 @@ class LocalAssetResolver(BaseResolver):
         return self._copy_and_resolve(scene, candidates[0])
 
     def _copy_and_resolve(self, scene: Scene, src: Path) -> ResolvedAsset:
-        import shutil
         scene_dir = self._scene_dir(scene)
         dest = scene_dir / f"asset{src.suffix}"
-        if not dest.exists():
-            shutil.copy2(src, dest)
+        if not FileManipulator.exists(dest):
+            FileManipulator.copy_file(src, dest)
             logger.info("[local] Copied %s → %s", src.name, dest)
         resolved = ResolvedAsset(
             scene_id=scene.id,
@@ -350,7 +350,7 @@ class StillImageResolver(BaseResolver):
         scene_dir = self._scene_dir(scene)
         dest = scene_dir / "asset.png"
 
-        if dest.exists():
+        if FileManipulator.exists(dest):
             logger.info("[pollinations] Image already exists, skipping: %s", dest)
         else:
             image_bytes = self._download(scene.visual.query)
@@ -390,6 +390,29 @@ class StillImageResolver(BaseResolver):
         return None
 
 
+# ── CodeResolver ─────────────────────────────────────────────────────────────
+
+
+class CodeResolver(BaseResolver):
+    """Generates a placeholder manifest for kind=code so Remotion can render CodeBlock natively."""
+
+    def resolve(self, scene: Scene) -> ResolvedAsset | None:
+        if scene.visual.kind != "code":
+            return None
+        scene_dir = self._scene_dir(scene)
+        dest = scene_dir / "asset.txt"
+        FileManipulator.write_text(dest, scene.visual.code or "")
+        resolved = ResolvedAsset(
+            scene_id=scene.id,
+            local_path=dest,
+            kind="code",
+            source="code",
+            license="generated",
+        )
+        self._write_manifest(resolved)
+        return resolved
+
+
 # ── Env helper ────────────────────────────────────────────────────────────────
 
 
@@ -406,8 +429,9 @@ class AssetOrchestrator:
 
     Priority:
       1. DiagramResolver  (for kind=diagram, always first)
-      2. StillImageResolver (for kind=image, only if USE_POLLINATIONS_STILL=true)
-      3. LocalAssetResolver (fallback)
+      2. CodeResolver     (for kind=code)
+      3. StillImageResolver (for kind=image, only if USE_POLLINATIONS_STILL=true)
+      4. LocalAssetResolver (fallback)
 
     If scene.visual.required is True and no resolver succeeds, raises RuntimeError.
     """
@@ -418,6 +442,7 @@ class AssetOrchestrator:
 
         self.resolvers: list[BaseResolver] = [
             DiagramResolver(self.run_assets_dir),
+            CodeResolver(self.run_assets_dir),
             StillImageResolver(self.run_assets_dir),
             LocalAssetResolver(self.run_assets_dir, library_dir),
         ]
